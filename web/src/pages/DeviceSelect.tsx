@@ -201,6 +201,13 @@ export default function DeviceSelect() {
           >
             Physics Bibliography
           </Link>
+          <span className="text-gray-700">·</span>
+          <Link
+            to="/replay"
+            className="text-cyan-600 hover:text-cyan-400 transition-colors"
+          >
+            🔄 Replay Mode
+          </Link>
         </div>
 
         {/* Contribute */}
