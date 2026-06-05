@@ -277,8 +277,7 @@ input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); 
 .text-cyan-400 { color: var(--c-ink-dim); }
 .text-cyan-300 { color: var(--c-ink); }
 .text-cyan-600 { color: var(--c-ink-dim); }
-.group:hover .group-hover\:text-cyan-400,
-.group-hover\:text-cyan-400 { color: var(--c-accent); }
+.group:hover .group-hover\:text-cyan-400 { color: var(--c-accent); }
 .hover\:text-cyan-400:hover  { color: var(--c-accent); }
 .hover\:text-cyan-300:hover  { color: var(--c-accent); }
 
