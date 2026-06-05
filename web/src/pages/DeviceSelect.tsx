@@ -123,7 +123,7 @@ export default function DeviceSelect() {
         <h1 className="stagger-1 relative text-5xl sm:text-6xl font-bold tracking-tight mb-3 text-white z-10">
           fusionsimulator<span className="text-cyan-400">.io</span>
         </h1>
-        <p className="stagger-2 relative text-gray-400 text-lg sm:text-xl font-light tracking-wide z-10">
+        <p className="stagger-2 relative text-gray-400 text-base sm:text-lg font-mono tracking-tight z-10">
           Real-time tokamak discharge simulator
         </p>
         <p className="stagger-2 relative text-gray-500 text-sm mt-3 tracking-wide font-mono z-10">

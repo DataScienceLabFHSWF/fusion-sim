@@ -242,7 +242,7 @@ export default function StatusPanel({
       {/* ── Power & Fusion ─────────────────────────────────────── */}
       <div className="border-t border-gray-800 pt-1.5">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] text-gray-500 flex items-center gap-1">
+          <span className="panel-title flex items-center gap-1">
             Power &amp; Fusion
             <InfoPopup title="Power Balance &amp; Fusion" position="right">{powerBalanceInfo}</InfoPopup>
           </span>
@@ -274,17 +274,17 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
 
   // Input side: external heating + alpha heating (for DT)
   const inputItems: { label: React.ReactNode; value: number; color: string }[] = [
-    { label: <><sub>OH</sub></>, value: s.p_ohmic, color: '#6b7280' },
-    { label: <><sub>NBI</sub></>, value: s.prog_p_nbi, color: '#3b82f6' },
-    { label: <><sub>ECH</sub></>, value: s.prog_p_ech, color: '#8b5cf6' },
+    { label: <><sub>OH</sub></>, value: s.p_ohmic, color: '#888888' },
+    { label: <><sub>NBI</sub></>, value: s.prog_p_nbi, color: '#56B4E9' },
+    { label: <><sub>ECH</sub></>, value: s.prog_p_ech, color: '#CC79A7' },
   ]
   if (s.prog_p_ich > 0.01) {
-    inputItems.push({ label: <><sub>ICH</sub></>, value: s.prog_p_ich, color: '#f59e0b' })
+    inputItems.push({ label: <><sub>ICH</sub></>, value: s.prog_p_ich, color: '#E69F00' })
   }
   // Alpha heating bar: always present for DT (shows 0 before fusion onset),
   // so the panel layout doesn't shift when alpha power appears mid-discharge.
   if (isDT) {
-    inputItems.push({ label: <><sub>&alpha;</sub></>, value: pAlpha, color: '#10b981' })
+    inputItems.push({ label: <><sub>&alpha;</sub></>, value: pAlpha, color: '#009E73' })
   }
 
   // Total input = external + alpha (for DT, alpha heats the plasma)
@@ -293,11 +293,11 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
   // Output side
   const dWdt = Math.max(s.p_input - s.p_loss - s.p_rad, -s.p_input)
   const outputItems: { label: React.ReactNode; value: number; color: string; fullLabel?: boolean }[] = [
-    { label: <><sub>rad</sub></>, value: s.p_rad, color: '#ef4444' },
-    { label: <><sub>loss</sub></>, value: s.p_loss, color: '#f97316' },
+    { label: <><sub>rad</sub></>, value: s.p_rad, color: '#D55E00' },
+    { label: <><sub>loss</sub></>, value: s.p_loss, color: '#E69F00' },
   ]
   if (Math.abs(dWdt) > 0.01) {
-    outputItems.push({ label: <>dW/dt</>, value: Math.abs(dWdt), color: '#eab308', fullLabel: true })
+    outputItems.push({ label: <>dW/dt</>, value: Math.abs(dWdt), color: '#F0E442', fullLabel: true })
   }
 
   const pOutputTotal = s.p_rad + s.p_loss + Math.max(dWdt, 0)
@@ -309,7 +309,7 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
     <div className="grid grid-cols-2 gap-x-4">
       {/* Input column */}
       <div>
-        <div className="text-[10px] text-gray-600 leading-none mb-1">Input</div>
+        <div className="text-[10px] text-gray-600 leading-none mb-1 uppercase tracking-wider">Input</div>
         {inputItems.map((item, i) => (
           <PowerBar key={i} label={<>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
@@ -317,7 +317,7 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
 
       {/* Output column */}
       <div>
-        <div className="text-[10px] text-gray-600 leading-none mb-1">Output</div>
+        <div className="text-[10px] text-gray-600 leading-none mb-1 uppercase tracking-wider">Output</div>
         {outputItems.map((item, i) => (
           <PowerBar key={i} label={item.fullLabel ? item.label : <>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
@@ -429,7 +429,7 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
       {/* Header */}
       <div className="flex items-center gap-1 mb-1">
         <span className={`text-[11px] ${isActive ? 'text-yellow-500' : 'text-gray-600'}`}>☢</span>
-        <span className="text-[10px] text-gray-500">Neutron diagnostic</span>
+        <span className="panel-title">Neutron diagnostic</span>
         <InfoPopup title="Neutron Diagnostics" position="left">{neutronDiagnosticInfo}</InfoPopup>
         {isActive && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse shrink-0" />
@@ -508,7 +508,7 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
   return (
     <div className="border-t border-gray-800 pt-1.5">
       <div className="flex items-center gap-1.5 mb-1">
-        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+        <span className="panel-title flex items-center gap-1">
           Divertor
           <InfoPopup title="Divertor Thermal Loading" position="right">{divertorInfo}</InfoPopup>
         </span>
