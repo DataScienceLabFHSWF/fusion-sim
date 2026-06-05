@@ -198,30 +198,34 @@ export default function Bibliography() {
   return (
     <div className="min-h-screen bg-black text-gray-200">
       {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-black/90 backdrop-blur border-b border-gray-800 px-6 sm:px-10 py-3 flex items-center justify-between">
         <Link
           to="/"
-          className="text-gray-400 hover:text-white text-sm transition-colors flex items-center gap-1.5"
+          className="font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500 hover:text-cyan-400 transition-colors"
         >
-          ← Back to Simulator
+          ← Back to simulator
         </Link>
-        <span className="text-gray-600 text-xs font-mono">fusionsimulator.io</span>
+        <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+          fusionsimulator<span className="text-gray-600">.io</span>
+        </span>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-10">
+      <main className="max-w-3xl mx-auto px-6 sm:px-10 py-12">
         {/* Page header */}
         <div className="mb-10">
-          <h1 className="text-3xl font-bold text-white mb-2">Physics Bibliography</h1>
+          <div className="panel-title mb-2">Reference</div>
+          <h1 className="text-3xl font-bold text-white mb-3">Physics Bibliography</h1>
           <p className="text-gray-400 text-sm leading-relaxed">
             Complete reference of every equation, scaling law, approximation, and formalism
             implemented in the simulator. This page is intended as a companion for students
             and researchers who want to understand the physics behind each panel.
           </p>
-          <div className="mt-4 px-4 py-3 bg-amber-900/20 border border-amber-700/30 rounded-lg text-amber-200/80 text-xs leading-relaxed">
-            <strong className="text-amber-300">Note:</strong> This simulator uses a zero-dimensional (0D)
-            global power-balance transport model with analytic equilibrium solutions. Results are
-            approximate and intended for qualitative educational use. They should not be used for
-            engineering design or quantitative predictions.
+          <div className="mt-5 border-l-2 border-gray-700 pl-4 py-1 text-gray-500 text-xs leading-relaxed max-w-2xl">
+            <span className="font-mono uppercase tracking-wider text-gray-400">Note</span>
+            {' — '}This simulator uses a zero-dimensional (0D) global power-balance transport
+            model with analytic equilibrium solutions. Results are approximate and intended for
+            qualitative educational use. They should not be used for engineering design or
+            quantitative predictions.
           </div>
         </div>
 

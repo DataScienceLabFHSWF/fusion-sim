@@ -321,7 +321,9 @@ input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); 
 .hover\:shadow-cyan-500\/10:hover { box-shadow: none; }
 
 /* ── Remaining neon / purple cleanup (centralised) ────────────── */
-.text-cyan-200, .text-cyan-500 { color: var(--c-accent); }
+/* Static content (equations, section numbers) → monochrome, not accent. */
+.text-cyan-200 { color: var(--c-ink); }
+.text-cyan-500 { color: var(--c-ink-dim); }
 .border-cyan-700, .border-cyan-800 { border-color: color-mix(in srgb, var(--c-accent) 30%, transparent); }
 .border-cyan-400\/60 { border-color: color-mix(in srgb, var(--c-accent) 50%, transparent); }
 .bg-cyan-400 { background-color: var(--c-accent); }
