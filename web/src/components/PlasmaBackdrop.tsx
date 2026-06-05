@@ -32,61 +32,102 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
     const canvas = canvasRef.current
     const parent = canvas?.parentElement
     if (!canvas || !parent) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
-    const draw = () => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let raf = 0
+    let dims = { w: 0, h: 0, dpr: 1 }
+
+    const measure = () => {
       const rect = parent.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) return
       const dpr = window.devicePixelRatio || 1
+      dims = { w: rect.width, h: rect.height, dpr }
       canvas.width = rect.width * dpr
       canvas.height = rect.height * dpr
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.clearRect(0, 0, rect.width, rect.height)
+    }
 
-      // Large plasma, axis pushed right so the cross-section bleeds off the
-      // right edge (and top/bottom) — cinematic, kaldera-style crop.
-      const a = rect.height * 0.85          // minor radius (px)
-      const cx = rect.width * 0.80          // magnetic axis x (right side)
-      const cy = rect.height * 0.5
-      const kappa = 1.55                    // elongation
-      const delta = 0.45                    // triangularity
-      const N = 20                          // nested surfaces
+    const drawFrame = (tMs: number) => {
+      const { w, h, dpr } = dims
+      if (w > 0 && h > 0) {
+        const t = tMs / 1000
+        // Breathing: a primary ~6.5s cycle drives a core-glow pulse and a
+        // gentle radius expansion; a slower harmonic adds organic shimmer.
+        const breathe = Math.sin((t * 2 * Math.PI) / 6.5)
+        const breathe2 = Math.sin((t * 2 * Math.PI) / 11 + 1)
+        const pulse = 0.5 + 0.5 * breathe                  // 0..1
 
-      // Warm core bloom (the "hot" plasma core).
-      const bloom = ctx.createRadialGradient(cx + a * 0.12, cy, 0, cx + a * 0.12, cy, a * 1.5)
-      bloom.addColorStop(0, 'rgba(252, 178, 98, 0.20)')
-      bloom.addColorStop(0.4, 'rgba(210, 92, 48, 0.06)')
-      bloom.addColorStop(1, 'rgba(0, 0, 0, 0)')
-      ctx.fillStyle = bloom
-      ctx.fillRect(0, 0, rect.width, rect.height)
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.clearRect(0, 0, w, h)
 
-      // Nested flux surfaces (edge → core).
-      ctx.lineWidth = 1.1
-      const steps = 160
-      for (let s = N; s >= 1; s--) {
-        const rho = s / N                                    // 1 = edge, →0 = core
-        const shift = a * 0.14 * (1 - rho)                   // Shafranov shift outward
-        const [r, g, b] = inferno(1 - rho)
-        const alpha = 0.09 + 0.5 * Math.pow(1 - rho, 1.4)    // faint, brighter core
-        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
-        ctx.beginPath()
-        for (let k = 0; k <= steps; k++) {
-          const th = (k / steps) * Math.PI * 2
-          const R = cx + shift + a * rho * Math.cos(th + delta * Math.sin(th))
-          const Z = cy - a * rho * kappa * Math.sin(th)
-          if (k === 0) ctx.moveTo(R, Z)
-          else ctx.lineTo(R, Z)
+        // Large plasma, axis pushed right so it bleeds off the right edge.
+        const a = h * 0.85 * (1 + 0.04 * breathe)          // ±4% radius breathing
+        const cx = w * 0.80
+        const cy = h * 0.5
+        const kappa = 1.55
+        const delta = 0.45
+        const N = 20
+
+        // Warm core bloom, pulsing (0.13 → 0.30).
+        const bloomA = 0.13 + 0.17 * pulse
+        const bloom = ctx.createRadialGradient(cx + a * 0.12, cy, 0, cx + a * 0.12, cy, a * 1.5)
+        bloom.addColorStop(0, `rgba(252, 178, 98, ${bloomA})`)
+        bloom.addColorStop(0.4, `rgba(210, 92, 48, ${bloomA * 0.32})`)
+        bloom.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        ctx.fillStyle = bloom
+        ctx.fillRect(0, 0, w, h)
+
+        // Nested flux surfaces (edge → core).
+        ctx.lineWidth = 1.1
+        const steps = 160
+        for (let s = N; s >= 1; s--) {
+          const rho = s / N
+          const shift = a * 0.14 * (1 - rho)
+          const [r, g, b] = inferno(1 - rho)
+          const alpha = (0.09 + 0.5 * Math.pow(1 - rho, 1.4)) * (0.82 + 0.18 * pulse)
+          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
+          ctx.beginPath()
+          for (let k = 0; k <= steps; k++) {
+            const th = (k / steps) * Math.PI * 2
+            // Per-surface ripple for a living-plasma shimmer.
+            const rr = rho * (1 + 0.018 * Math.sin(t * 0.9 + s * 0.55) * breathe2)
+            const R = cx + shift + a * rr * Math.cos(th + delta * Math.sin(th))
+            const Z = cy - a * rr * kappa * Math.sin(th)
+            if (k === 0) ctx.moveTo(R, Z)
+            else ctx.lineTo(R, Z)
+          }
+          ctx.closePath()
+          ctx.stroke()
         }
-        ctx.closePath()
-        ctx.stroke()
       }
     }
 
-    draw()
-    const ro = new ResizeObserver(draw)
+    // Single animation loop (the only place that schedules rAF).
+    const loop = (tMs: number) => {
+      drawFrame(tMs)
+      raf = requestAnimationFrame(loop)
+    }
+    const startLoop = () => { if (!reduce) { cancelAnimationFrame(raf); raf = requestAnimationFrame(loop) } }
+
+    measure()
+    // Synchronous first paint — guarantees a static image even when rAF is
+    // paused (background/headless tab); the loop animates once visible.
+    drawFrame(0)
+    startLoop()
+
+    const ro = new ResizeObserver(() => { measure(); drawFrame(0) })
     ro.observe(parent)
-    return () => ro.disconnect()
+    const onVis = () => {
+      if (document.hidden) cancelAnimationFrame(raf)
+      else startLoop()
+    }
+    document.addEventListener('visibilitychange', onVis)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [])
 
   return <canvas ref={canvasRef} className={className} aria-hidden="true" />

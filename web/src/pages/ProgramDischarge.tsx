@@ -82,7 +82,16 @@ function Sparkline({
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
-      <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      <path
+        className="trace-sweep"
+        pathLength={1}
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -202,7 +211,7 @@ export default function ProgramDischarge() {
               </span>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" key={selected}>
               <WaveformRow label="Iₚ" unit="MA" points={program.ip} duration={program.duration} color={accentColor} />
               <WaveformRow label="Bₜ" unit="T" points={program.bt} duration={program.duration} color={accentColor} />
               <WaveformRow label="n̄ₑ" unit="10²⁰m⁻³" points={program.ne_target} duration={program.duration} color={accentColor} />

@@ -115,9 +115,9 @@ export default function DeviceSelect() {
   }
 
   return (
-    <div className="page-enter min-h-screen flex flex-col">
-      {/* ── Top nav ── */}
-      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800">
+    <div className="page-enter relative">
+      {/* ── Top nav (persists above everything) ── */}
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur">
         <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
@@ -134,12 +134,12 @@ export default function DeviceSelect() {
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <header className="relative px-6 sm:px-10 overflow-hidden flex items-center min-h-[clamp(360px,52vh,560px)]">
+      {/* ── Hero (pinned; the device panel parallax-slides over it) ── */}
+      <header className="sticky top-0 z-0 h-[100svh] px-6 sm:px-10 overflow-hidden flex items-center">
         <PlasmaBackdrop className="absolute inset-0 w-full h-full pointer-events-none" />
         {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />
-        <div className="relative max-w-6xl mx-auto w-full z-10 py-12">
+        <div className="relative max-w-6xl mx-auto w-full z-10 -mt-12">
           <h1 className="stagger-1 text-5xl sm:text-7xl font-bold tracking-tight text-white">
             fusionsimulator<span className="text-gray-600">.io</span>
           </h1>
@@ -150,10 +150,15 @@ export default function DeviceSelect() {
             0D transport &middot; MHD equilibrium &middot; ELM dynamics &middot; Fusion diagnostics
           </p>
         </div>
+        {/* Scroll affordance */}
+        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-600 scroll-hint">
+          <span>Select a device</span>
+          <span className="text-base leading-none">↓</span>
+        </div>
       </header>
 
-      {/* ── Device selection ── */}
-      <main className="flex-1 px-6 sm:px-10 pb-16">
+      {/* ── Device selection (slides up over the pinned hero) ── */}
+      <main className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 shadow-[0_-28px_60px_rgba(0,0,0,0.6)] px-6 sm:px-10 pt-12 pb-16">
         <div className="max-w-6xl mx-auto">
           <div className="panel-title pb-2 mb-px">
             <span className="panel-num">01 · </span>Select a device

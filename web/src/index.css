@@ -111,15 +111,11 @@ body {
 }
 
 /* ── Top bar & dividers ───────────────────────────────────────── */
-/* High z-index + isolation so the settings dropdown escapes above the
-   transform-animated panels below (fixes hidden-menu stacking bug). */
 .border-b.border-gray-800 {
   border-color: var(--c-line);
   background: color-mix(in srgb, var(--c-base) 92%, transparent);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  position: relative;
-  z-index: 60;
 }
 .border-t.border-gray-800 { border-color: var(--c-line); }
 .border-gray-800\/50      { border-color: color-mix(in srgb, var(--c-line) 60%, transparent); }
@@ -361,6 +357,22 @@ a:focus-visible {
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .tutorial-card { animation: slideUp 0.4s ease-out; }
 
+/* Waveform "play forward" — draw each trace left→right over 5s, 0.5s after
+   mount. Paths set pathLength=1 so the dash math is geometry-independent. */
+@keyframes traceSweep { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.trace-sweep {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: traceSweep 5s linear 0.5s both;
+}
+
+/* Landing scroll affordance — gentle bounce (keeps the -50% X centering) */
+@keyframes scrollHint {
+  0%, 100% { opacity: 0.45; transform: translate(-50%, 0); }
+  50%      { opacity: 0.85; transform: translate(-50%, 5px); }
+}
+.scroll-hint { animation: scrollHint 2s ease-in-out infinite; }
+
 /* Hero: a single, faint, STATIC plasma tint — a quiet nod, not a bloom */
 .hero-glow {
   background-image:
@@ -370,6 +382,8 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .stagger-1, .stagger-2, .stagger-3, .stagger-4, .stagger-5, .stagger-6,
   .page-enter, .tutorial-card { animation: none; }
+  .trace-sweep { animation: none; stroke-dashoffset: 0; }
+  .scroll-hint { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════

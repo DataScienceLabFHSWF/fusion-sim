@@ -147,7 +147,7 @@ export default function ControlRoom() {
   return (
     <div className="page-enter h-screen flex flex-col bg-[#0a0e17] overflow-hidden">
       {/* ─── Top bar ─── */}
-      <div className="flex flex-wrap items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
+      <div className="relative z-50 flex flex-wrap items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
         {/* Device, Scenario, Fuel selectors */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {/* Device selector */}
