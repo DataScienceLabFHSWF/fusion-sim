@@ -82,7 +82,16 @@ function Sparkline({
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
-      <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      <path
+        className="trace-sweep"
+        pathLength={1}
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -141,85 +150,88 @@ export default function ProgramDischarge() {
   }
 
   const accentColor =
-    selected === 'hmode' ? '#22d3ee' : selected === 'lmode' ? '#fbbf24' : '#ef4444'
+    selected === 'hmode' ? '#e0a23a' : selected === 'lmode' ? '#56B4E9' : '#c8553d'
 
   return (
-    <div className="page-enter min-h-screen flex flex-col items-center p-8 max-w-5xl mx-auto">
-      {/* Back link */}
-      <button
-        onClick={() => navigate('/')}
-        className="self-start text-gray-500 hover:text-cyan-400 text-sm mb-6 cursor-pointer"
-      >
-        ← Back to device selection
-      </button>
+    <div className="page-enter min-h-screen flex flex-col">
+      {/* ── Top nav ── */}
+      <nav className="flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800">
+        <button
+          onClick={() => navigate('/')}
+          className="font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500 hover:text-cyan-400 transition-colors cursor-pointer"
+        >
+          ← Device selection
+        </button>
+        <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+          fusionsimulator<span className="text-gray-600">.io</span>
+        </span>
+      </nav>
 
-      {/* Header */}
-      <h1 className="text-3xl font-bold mb-1">
-        Program Discharge —{' '}
-        <span className="text-cyan-400">{device.name}</span>
-      </h1>
-      <p className="text-gray-500 text-sm mb-8">
-        Select a scenario, review the waveforms, then run.
-      </p>
-
-      {/* Preset selector */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full mb-8">
-        {getPresets(deviceId ?? '').map((p) => {
-          const isSelected = p.id === selected
-          const borderClass =
-            p.color === 'cyan'
-              ? isSelected ? 'border-cyan-500' : 'border-gray-700 hover:border-cyan-700'
-              : p.color === 'amber'
-                ? isSelected ? 'border-amber-500' : 'border-gray-700 hover:border-amber-700'
-                : isSelected ? 'border-red-500' : 'border-gray-700 hover:border-red-700'
-
-          return (
-            <button
-              key={p.id}
-              onClick={() => setSelected(p.id)}
-              className={`bg-gray-900 border rounded-lg p-4 text-left transition-all duration-150 cursor-pointer ${borderClass}`}
-            >
-              <h3 className="text-sm font-semibold text-white mb-1">{p.name}</h3>
-              <p className="text-gray-500 text-xs leading-relaxed">{p.desc}</p>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Waveform detail panel */}
-      {program && (
-        <div className="w-full bg-gray-900 border border-gray-700 rounded-lg p-5 mb-8">
-          <div className="flex items-baseline justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-300">
-              Programmed Waveforms
-            </h2>
-            <span className="text-xs text-gray-500 font-mono">
-              Duration: {program.duration.toFixed(1)} s
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <WaveformRow label="Iₚ" unit="MA" points={program.ip} duration={program.duration} color={accentColor} />
-            <WaveformRow label="Bₜ" unit="T" points={program.bt} duration={program.duration} color={accentColor} />
-            <WaveformRow label="n̄ₑ" unit="10²⁰m⁻³" points={program.ne_target} duration={program.duration} color={accentColor} />
-            <WaveformRow label="P_NBI" unit="MW" points={program.p_nbi} duration={program.duration} color={accentColor} />
-            <WaveformRow label="P_ECH" unit="MW" points={program.p_ech} duration={program.duration} color={accentColor} />
-            <WaveformRow label="P_ICH" unit="MW" points={program.p_ich} duration={program.duration} color={accentColor} />
-            <WaveformRow label="κ" unit="" points={program.kappa} duration={program.duration} color={accentColor} />
-            <WaveformRow label="δ" unit="" points={program.delta} duration={program.duration} color={accentColor} />
-          </div>
+      <main className="flex-1 w-full max-w-5xl mx-auto px-6 sm:px-10 py-12">
+        {/* Header */}
+        <div className="panel-title mb-2">
+          <span className="panel-num">02 · </span>Program discharge
         </div>
-      )}
+        <h1 className="font-mono text-3xl sm:text-4xl font-bold tracking-tight text-white mb-2">
+          {device.name}
+        </h1>
+        <p className="text-gray-500 text-sm font-mono mb-10">
+          Select a scenario, review the waveforms, then run.
+        </p>
 
-      {/* Run button */}
-      <button
-        onClick={() => navigate(`/run/${deviceId}?preset=${selected}`)}
-        className="px-8 py-3 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-lg font-bold
-                   transition-colors cursor-pointer shadow-lg shadow-cyan-600/20
-                   hover:shadow-cyan-500/30"
-      >
-        ▶ Run Discharge
-      </button>
+        {/* Scenario selector — hairline-tiled */}
+        <div className="panel-title pb-2 mb-px">Scenario</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--c-line)] border-y border-gray-800 mb-10">
+          {getPresets(deviceId ?? '').map((p) => {
+            const isSelected = p.id === selected
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelected(p.id)}
+                className={`relative p-4 text-left transition-colors cursor-pointer
+                  ${isSelected ? 'bg-[var(--c-raised)]' : 'bg-gray-900 hover:bg-[var(--c-raised)]'}`}
+              >
+                {isSelected && <div className="absolute top-0 left-0 right-0 h-0.5 bg-cyan-500" />}
+                <h3 className={`font-mono text-[11px] uppercase tracking-wider mb-1.5 ${isSelected ? 'text-cyan-400' : 'text-gray-300'}`}>
+                  {p.name}
+                </h3>
+                <p className="text-gray-500 text-xs leading-relaxed">{p.desc}</p>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Waveform detail */}
+        {program && (
+          <div className="mb-10">
+            <div className="flex items-baseline justify-between mb-3 border-b border-gray-800 pb-2">
+              <h2 className="panel-title">Programmed waveforms</h2>
+              <span className="text-xs text-gray-500 font-mono tabular-nums">
+                Duration {program.duration.toFixed(1)} s
+              </span>
+            </div>
+
+            <div className="space-y-2" key={selected}>
+              <WaveformRow label="Iₚ" unit="MA" points={program.ip} duration={program.duration} color={accentColor} />
+              <WaveformRow label="Bₜ" unit="T" points={program.bt} duration={program.duration} color={accentColor} />
+              <WaveformRow label="n̄ₑ" unit="10²⁰m⁻³" points={program.ne_target} duration={program.duration} color={accentColor} />
+              <WaveformRow label="P_NBI" unit="MW" points={program.p_nbi} duration={program.duration} color={accentColor} />
+              <WaveformRow label="P_ECH" unit="MW" points={program.p_ech} duration={program.duration} color={accentColor} />
+              <WaveformRow label="P_ICH" unit="MW" points={program.p_ich} duration={program.duration} color={accentColor} />
+              <WaveformRow label="κ" unit="" points={program.kappa} duration={program.duration} color={accentColor} />
+              <WaveformRow label="δ" unit="" points={program.delta} duration={program.duration} color={accentColor} />
+            </div>
+          </div>
+        )}
+
+        {/* Run button */}
+        <button
+          onClick={() => navigate(`/run/${deviceId}?preset=${selected}`)}
+          className="bg-cyan-600 px-8 py-3 text-base cursor-pointer"
+        >
+          ▶ Run discharge
+        </button>
+      </main>
     </div>
   )
 }

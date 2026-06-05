@@ -245,7 +245,7 @@ export default function ShotPlanner({
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-800">
         <div>
-          <h2 className="text-sm font-bold text-gray-200">Shot Planner</h2>
+          <h2 className="panel-title">Shot Planner</h2>
           <p className="text-[9px] text-gray-600 mt-0.5">Click any trace to draw a custom waveform</p>
         </div>
         <button

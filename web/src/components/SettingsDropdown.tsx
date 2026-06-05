@@ -69,16 +69,16 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
 
           {/* Theme toggle */}
           <div>
-            <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-wide">View</div>
+            <div className="text-[10px] text-gray-500 mb-1.5 tracking-wide">Theme</div>
             <div className="flex rounded overflow-hidden border border-gray-700">
-              {(['classic', 'modern', 'retro'] as Theme[]).map((t) => (
+              {(['signature', 'retro'] as Theme[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTheme(t)}
                   className={`flex-1 px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer capitalize
                     ${
                       theme === t
-                        ? 'bg-cyan-700 text-white'
+                        ? 'theme-toggle-active'
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
                     }`}
                 >
@@ -90,7 +90,7 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
 
           {/* Units toggle */}
           <div>
-            <div className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-wide">Units</div>
+            <div className="text-[10px] text-gray-500 mb-1.5 tracking-wide">Units</div>
             <div className="flex rounded overflow-hidden border border-gray-700">
               {(['metric', 'imperial'] as Units[]).map((u) => (
                 <button
@@ -99,7 +99,7 @@ export default function SettingsDropdown({ onRestartTutorial }: { onRestartTutor
                   className={`flex-1 px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer capitalize
                     ${
                       units === u
-                        ? 'bg-cyan-700 text-white'
+                        ? 'theme-toggle-active'
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
                     }`}
                 >

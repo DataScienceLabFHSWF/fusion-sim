@@ -22,26 +22,26 @@ interface TraceConfig {
 }
 
 const ALL_TRACES: TraceConfig[] = [
-  { key: 'ip',               base: 'I',     sub: 'p',       unit: 'MA',       color: '#22d3ee', targetKey: 'ip' },
-  { key: 'beta_n',           base: 'β',     sub: 'N',       unit: '',         color: '#fbbf24', targetKey: 'beta_n' },
-  { key: 'li',               base: 'l',     sub: 'i',       unit: '',         color: '#38bdf8', yMin: 0, yMax: 1.5 },
-  { key: 'd_alpha',          base: 'D',     sub: 'α',       unit: 'a.u.',     color: '#fb7185' },
-  { key: 'q95',              base: 'q',     sub: '95',      unit: '',         color: '#a78bfa', yMax: 10 },
-  { key: 'h_factor',         base: 'H',     sub: '98',      unit: '',         color: '#34d399' },
-  { key: 'f_greenwald',      base: 'f',     sub: 'GW',      unit: '',         color: '#f472b6' },
-  { key: 'ne_bar',           base: 'n\u0305', sub: 'e',     unit: '10²⁰/m³', color: '#60a5fa' },
-  { key: 'ne_ped',           base: 'n',     sub: 'e,ped',   unit: '10²⁰/m³', color: '#818cf8' },
-  { key: 'te0',              base: 'T',     sub: 'e0',      unit: 'keV',      color: '#f97316' },
-  { key: 'te_ped',           base: 'T',     sub: 'e,ped',   unit: 'keV',      color: '#fb923c' },
-  { key: 'ne_line',          base: 'n',     sub: 'e,line',  unit: '10²⁰/m³', color: '#67e8f9' },
-  { key: 'w_th',             base: 'W',     sub: 'th',      unit: 'MJ',       color: '#4ade80' },
-  { key: 'p_input',          base: 'P',     sub: 'in',      unit: 'MW',       color: '#facc15' },
-  { key: 'p_rad',            base: 'P',     sub: 'rad',     unit: 'MW',       color: '#e879f9' },
-  { key: 'p_fus',            base: 'P',     sub: 'fus',     unit: 'MW',       color: '#ff6b6b' },
-  { key: 'p_loss',           base: 'P',     sub: 'loss',    unit: 'MW',       color: '#c084fc' },
-  { key: 'v_loop',           base: 'V',     sub: 'loop',    unit: 'V',        color: '#2dd4bf' },
-  { key: 'impurity_fraction',base: 'f',     sub: 'imp',     unit: '%',        color: '#86efac' },
-  { key: 'disruption_risk',  base: 'D',     sub: 'risk',    unit: '',         color: '#ef4444' },
+  { key: 'ip',               base: 'I',     sub: 'p',       unit: 'MA',       color: '#56B4E9', targetKey: 'ip' },
+  { key: 'beta_n',           base: 'β',     sub: 'N',       unit: '',         color: '#E69F00', targetKey: 'beta_n' },
+  { key: 'li',               base: 'l',     sub: 'i',       unit: '',         color: '#92C5DE', yMin: 0, yMax: 1.5 },
+  { key: 'd_alpha',          base: 'D',     sub: 'α',       unit: 'a.u.',     color: '#D55E00' },
+  { key: 'q95',              base: 'q',     sub: '95',      unit: '',         color: '#CC79A7', yMax: 10 },
+  { key: 'h_factor',         base: 'H',     sub: '98',      unit: '',         color: '#009E73' },
+  { key: 'f_greenwald',      base: 'f',     sub: 'GW',      unit: '',         color: '#0072B2' },
+  { key: 'ne_bar',           base: 'n\u0305', sub: 'e',     unit: '10²⁰/m³', color: '#0072B2' },
+  { key: 'ne_ped',           base: 'n',     sub: 'e,ped',   unit: '10²⁰/m³', color: '#56B4E9' },
+  { key: 'te0',              base: 'T',     sub: 'e0',      unit: 'keV',      color: '#E69F00' },
+  { key: 'te_ped',           base: 'T',     sub: 'e,ped',   unit: 'keV',      color: '#D55E00' },
+  { key: 'ne_line',          base: 'n',     sub: 'e,line',  unit: '10²⁰/m³', color: '#56B4E9' },
+  { key: 'w_th',             base: 'W',     sub: 'th',      unit: 'MJ',       color: '#009E73' },
+  { key: 'p_input',          base: 'P',     sub: 'in',      unit: 'MW',       color: '#F0E442' },
+  { key: 'p_rad',            base: 'P',     sub: 'rad',     unit: 'MW',       color: '#CC79A7' },
+  { key: 'p_fus',            base: 'P',     sub: 'fus',     unit: 'MW',       color: '#009E73' },
+  { key: 'p_loss',           base: 'P',     sub: 'loss',    unit: 'MW',       color: '#E69F00' },
+  { key: 'v_loop',           base: 'V',     sub: 'loop',    unit: 'V',        color: '#92C5DE' },
+  { key: 'impurity_fraction',base: 'f',     sub: 'imp',     unit: '%',        color: '#BBBBBB' },
+  { key: 'disruption_risk',  base: 'D',     sub: 'risk',    unit: '',         color: '#c8553d' },
 ]
 
 /** Render a label with proper subscript on canvas.
@@ -118,7 +118,6 @@ export default function UnifiedTracePanel({
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { theme } = useSettings()
-  const isModern = theme === 'modern'
   const isRetro = theme === 'retro'
 
   // Close dropdown on outside click
@@ -185,7 +184,7 @@ export default function UnifiedTracePanel({
     const ROW_H = H / numTraces
 
     // Clear
-    ctx.fillStyle = isRetro ? '#000000' : isModern ? '#08080a' : '#0a0e17'
+    ctx.fillStyle = isRetro ? '#000000' : '#0e0f11'
     ctx.fillRect(0, 0, W, H)
 
     const plotW = W - MARGIN_LEFT - MARGIN_RIGHT
@@ -200,18 +199,16 @@ export default function UnifiedTracePanel({
       const y0 = row * ROW_H + MARGIN_TOP
       const h = ROW_H - MARGIN_TOP - MARGIN_BOTTOM
 
-      // Row background
+      // Row background (subtle alternating charcoal)
       if (isRetro) {
         ctx.fillStyle = '#000000'
       } else {
-        ctx.fillStyle = isModern
-          ? (row % 2 === 0 ? '#0a0a0d' : '#0e0e11')
-          : (row % 2 === 0 ? '#0d1117' : '#111827')
+        ctx.fillStyle = row % 2 === 0 ? '#111316' : '#15171b'
       }
       ctx.fillRect(0, row * ROW_H, W, ROW_H)
 
       // Row separator
-      ctx.strokeStyle = isRetro ? 'rgba(255,255,255,0.25)' : isModern ? 'rgba(255,255,255,0.06)' : '#1f2937'
+      ctx.strokeStyle = isRetro ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.05)'
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(MARGIN_LEFT, (row + 1) * ROW_H)
@@ -533,7 +530,7 @@ export default function UnifiedTracePanel({
     ctx.textAlign = 'right'
     ctx.fillStyle = '#4b5563'
     ctx.fillText('[sec]', toX(0) - 12, totalH - 12)
-  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isModern, isRetro])
+  }, [history, duration, targets, scrubTime, elmActive, activeTraces, isRetro])
 
   // Redraw on data changes
   useEffect(() => {
