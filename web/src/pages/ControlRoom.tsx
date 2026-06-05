@@ -280,7 +280,7 @@ export default function ControlRoom() {
 
       {/* ─── Main grid ─── */}
       <div className="flex-1 overflow-x-auto">
-      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-2 p-2 min-h-0">
+      <div className="min-w-[768px] h-full grid grid-cols-[1fr_1.5fr_1fr] grid-rows-[1.1fr_1fr] gap-px min-h-0 bg-[var(--c-line)]">
         {/* Top-left: Equilibrium cross-section (single cell) */}
         <div data-tutorial="equilibrium" className="stagger-1 bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
           <EquilibriumCanvas snapshot={displaySnapshot} wallJson={wallJson} limiterPoints={limiterPoints} />

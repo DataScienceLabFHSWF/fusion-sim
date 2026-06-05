@@ -98,27 +98,36 @@ body {
 .hover\:border-cyan-700:hover { border-color: color-mix(in srgb, var(--c-accent) 45%, transparent); }
 .hover\:border-amber-700:hover { border-color: color-mix(in srgb, var(--c-accent) 45%, transparent); }
 
-/* ── Panels / cards ───────────────────────────────────────────── */
+/* ── Panels → borderless instrument regions (kaldera) ─────────────
+   No card chrome: surface-filled regions, sharp corners, no border, no
+   shadow. Separation comes from the base-bg showing through a 1px grid
+   gap (set on the grid container) — a hairline-tiled instrument field,
+   not a deck of rounded cards. */
 .bg-gray-900.border.border-gray-700.rounded-lg {
   background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 6px;
+  border: none;
+  border-radius: 0;
   box-shadow: none;
-  transition: border-color 0.18s ease;
-}
-.bg-gray-900.border.border-gray-700.rounded-lg:hover {
-  border-color: var(--c-line-strong);
 }
 
 /* ── Top bar & dividers ───────────────────────────────────────── */
+/* High z-index + isolation so the settings dropdown escapes above the
+   transform-animated panels below (fixes hidden-menu stacking bug). */
 .border-b.border-gray-800 {
   border-color: var(--c-line);
   background: color-mix(in srgb, var(--c-base) 92%, transparent);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  position: relative;
+  z-index: 60;
 }
 .border-t.border-gray-800 { border-color: var(--c-line); }
 .border-gray-800\/50      { border-color: color-mix(in srgb, var(--c-line) 60%, transparent); }
+
+/* Sharp corners everywhere (kaldera instrument look). Keep only true
+   circles: rounded-full (status dots, the "i" glyph, circular gauges). */
+.rounded, .rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl,
+.rounded-t, .rounded-b, .rounded-t-lg, .rounded-b-lg { border-radius: 0; }
 
 /* ── Buttons ──────────────────────────────────────────────────────
    Monochrome at rest, warm to amber on hover/active (kaldera). Thin
@@ -133,7 +142,7 @@ button.bg-emerald-600 {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  border-radius: 4px;
+  border-radius: 0;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
@@ -172,7 +181,7 @@ button.bg-emerald-600 {
 select.bg-gray-800 {
   background: var(--c-raised);
   border: 1px solid var(--c-line);
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--c-ink);
   font-family: var(--font-mono);
   text-transform: uppercase;
@@ -212,7 +221,7 @@ input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); 
 /* ── Button groups (presets / speed) ──────────────────────────── */
 .flex.rounded.overflow-hidden.border.border-gray-700 {
   border: 1px solid var(--c-line);
-  border-radius: 6px;
+  border-radius: 0;
 }
 .flex.rounded.overflow-hidden.border.border-gray-700 button.bg-gray-800 {
   background: var(--c-raised);
@@ -246,7 +255,7 @@ input[type="range"]:active::-moz-range-thumb     { background: var(--c-accent); 
 .settings-panel {
   background: var(--c-surface);
   border: 1px solid var(--c-line-strong);
-  border-radius: 6px;
+  border-radius: 0;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
