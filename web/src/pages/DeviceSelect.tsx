@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
+import PlasmaBackdrop from '../components/PlasmaBackdrop'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
@@ -134,9 +135,11 @@ export default function DeviceSelect() {
       </nav>
 
       {/* ── Hero ── */}
-      <header className="relative px-6 sm:px-10 pt-20 sm:pt-28 pb-12 overflow-hidden">
-        <div className="hero-glow absolute inset-0 pointer-events-none" />
-        <div className="relative max-w-6xl mx-auto z-10">
+      <header className="relative px-6 sm:px-10 overflow-hidden flex items-center min-h-[clamp(360px,52vh,560px)]">
+        <PlasmaBackdrop className="absolute inset-0 w-full h-full pointer-events-none" />
+        {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />
+        <div className="relative max-w-6xl mx-auto w-full z-10 py-12">
           <h1 className="stagger-1 text-5xl sm:text-7xl font-bold tracking-tight text-white">
             fusionsimulator<span className="text-gray-600">.io</span>
           </h1>
