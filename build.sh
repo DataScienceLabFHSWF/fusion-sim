@@ -8,7 +8,8 @@ export PATH="$HOME/.cargo/bin:$PATH"
 wasm-pack build "$REPO_ROOT/crates/tok-sym-core" \
   --target web \
   --out-dir "$REPO_ROOT/web/src/wasm" \
-  --features wasm
+  --features wasm \
+  -- --no-default-features
 
 echo ""
 echo "=== Building frontend ==="

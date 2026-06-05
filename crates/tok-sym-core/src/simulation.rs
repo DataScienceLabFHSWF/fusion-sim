@@ -856,18 +856,6 @@ impl Simulation {
             }
         };
 
-        // Extend open divertor legs to the limiter. The analytic Cerfon-Freidberg
-        // legs thin out, so marching-squares terminates them short of the strike
-        // points (the leg floats in the SOL). Connect each open leg-end to the
-        // wall so the separatrix visibly reaches its strike points.
-        if !is_limited && !separatrix.points.is_empty() && !self.device.wall_outline.is_empty() {
-            let dr = (grid_r_max - grid_r_min) / (self.eq_nr - 1) as f64;
-            let dz = (grid_z_max - grid_z_min) / (self.eq_nz - 1) as f64;
-            let jump = 3.0 * (dr * dr + dz * dz).sqrt();
-            separatrix.points =
-                contour::extend_legs_to_wall(&separatrix.points, &self.device.wall_outline, jump, 0.45);
-        }
-
         let (mut axis_r, axis_z) = self.equilibrium.axis_physical();
         let (xpoint_r, xpoint_z) = if is_limited {
             (0.0, 0.0)
@@ -997,83 +985,6 @@ impl Simulation {
 mod tests {
     use super::*;
     use crate::devices;
-
-    /// After leg extension, every OPEN separatrix chain endpoint reaches the
-    /// limiter wall (within ~5 cm) at H-mode flattop. Guards the divertor-leg /
-    /// strike-point rendering fix (analytic legs otherwise float short of the wall).
-    #[test]
-    fn test_separatrix_legs_reach_wall_at_flattop() {
-        let device = devices::diiid();
-        let wall = device.wall_outline.clone();
-        let program = DischargeProgram::standard_hmode(&device);
-        let mut sim = Simulation::new(device, program);
-        sim.start();
-        let mut snap = sim.step(0.0);
-        for _ in 0..500 {
-            snap = sim.step(0.01); // 5 s -> flattop
-        }
-        assert!(!snap.is_limited, "expected diverted plasma at flattop");
-        let sep = &snap.separatrix.points;
-        assert!(sep.len() > 50, "separatrix should be populated, got {}", sep.len());
-
-        let dist_to_wall = |p: (f64, f64)| -> f64 {
-            let mut best = f64::INFINITY;
-            for i in 0..wall.len() {
-                let a = wall[i];
-                let b = wall[(i + 1) % wall.len()];
-                let dx = b.0 - a.0;
-                let dy = b.1 - a.1;
-                let len2 = dx * dx + dy * dy;
-                let t = if len2 > 0.0 {
-                    (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let c = (a.0 + t * dx, a.1 + t * dy);
-                best = best.min((p.0 - c.0).hypot(p.1 - c.1));
-            }
-            best
-        };
-
-        let wrmin = wall.iter().map(|w| w.0).fold(f64::INFINITY, f64::min);
-        let wrmax = wall.iter().map(|w| w.0).fold(f64::NEG_INFINITY, f64::max);
-        let wzmin = wall.iter().map(|w| w.1).fold(f64::INFINITY, f64::min);
-        let wzmax = wall.iter().map(|w| w.1).fold(f64::NEG_INFINITY, f64::max);
-        let jump = 3.0 * ((wrmax - wrmin) / 47.0).hypot((wzmax - wzmin) / 71.0);
-
-        // Split into chains; open chains are divertor legs that must reach the wall.
-        let mut chains: Vec<Vec<(f64, f64)>> = Vec::new();
-        let mut cur: Vec<(f64, f64)> = Vec::new();
-        for i in 0..sep.len() {
-            if i > 0 {
-                let d = (sep[i].0 - sep[i - 1].0).hypot(sep[i].1 - sep[i - 1].1);
-                if d > jump {
-                    chains.push(std::mem::take(&mut cur));
-                }
-            }
-            cur.push(sep[i]);
-        }
-        if !cur.is_empty() {
-            chains.push(cur);
-        }
-
-        let mut open_legs = 0;
-        for ch in &chains {
-            if ch.len() < 2 {
-                continue;
-            }
-            let f = ch[0];
-            let l = ch[ch.len() - 1];
-            if (f.0 - l.0).hypot(f.1 - l.1) >= jump {
-                open_legs += 1;
-                let df = dist_to_wall(f);
-                let dl = dist_to_wall(l);
-                assert!(df < 0.05, "open leg start {:?} is {:.3} m from wall", f, df);
-                assert!(dl < 0.05, "open leg end {:?} is {:.3} m from wall", l, dl);
-            }
-        }
-        assert!(open_legs >= 1, "expected at least one open divertor leg, got {}", open_legs);
-    }
 
     #[test]
     fn test_waveform_interpolation() {
