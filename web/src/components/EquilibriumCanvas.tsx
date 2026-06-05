@@ -10,12 +10,29 @@ interface Props {
   limiterPoints?: [number, number][] // optional CAD limiter — replaces wall when provided
 }
 
-/** Colour palette for flux surfaces — core (warm) → edge (cool). */
+/** Inferno colormap — perceptually uniform, colourblind-robust (vs the old
+ *  ad-hoc orange→blue ramp). 10 anchor stops, linearly interpolated. */
+const INFERNO: [number, number, number][] = [
+  [0, 0, 4], [27, 12, 65], [74, 12, 107], [120, 28, 109], [165, 44, 96],
+  [207, 68, 70], [237, 105, 37], [251, 154, 6], [247, 208, 60], [252, 255, 164],
+]
+function inferno(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, t)) * (INFERNO.length - 1)
+  const i = Math.floor(x)
+  const f = x - i
+  const a = INFERNO[i]
+  const b = INFERNO[Math.min(i + 1, INFERNO.length - 1)]
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+  ]
+}
+
+/** Flux-surface colour — core (level 0) is hottest/brightest, edge (level 1)
+ *  fades to dark, following the inferno luminance ramp. */
 function fluxColor(normalizedLevel: number): string {
-  // level 0 = core (hot orange/white), level 1 = edge (cool blue)
-  const r = Math.round(255 - normalizedLevel * 180)
-  const g = Math.round(140 - normalizedLevel * 100)
-  const b = Math.round(60 + normalizedLevel * 195)
+  const [r, g, b] = inferno(1 - normalizedLevel)
   return `rgb(${r},${g},${b})`
 }
 
@@ -23,7 +40,6 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const { theme } = useSettings()
-  const isModern = theme === 'modern'
   const isRetro = theme === 'retro'
 
   const draw = useCallback(() => {
@@ -47,7 +63,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     const H = rect.height
 
     // Clear
-    ctx.fillStyle = isRetro ? '#000000' : isModern ? '#08080a' : '#0a0e17'
+    ctx.fillStyle = isRetro ? '#000000' : '#0e0f11'
     ctx.fillRect(0, 0, W, H)
 
     // Use limiter as wall boundary when provided, otherwise parse wallJson
@@ -324,7 +340,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
 
     // --- Labels ---
     const labelColor = isRetro ? '#1a801a' : '#9ca3af'
-    const labelHighlight = isRetro ? '#33ff33' : '#22d3ee'
+    const labelHighlight = isRetro ? '#ffb000' : '#e0a23a'
     ctx.fillStyle = labelColor
     ctx.font = isRetro ? '11px "VCR OSD Mono", "Courier New", monospace' : '11px monospace'
     ctx.textAlign = 'left'
@@ -375,7 +391,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
         ctx.fillText('Diverted', labelX, labelY)
       }
     }
-  }, [snapshot, wallJson, limiterPoints, isModern, isRetro])
+  }, [snapshot, wallJson, limiterPoints, isRetro])
 
   // Redraw on data change
   useEffect(() => {
@@ -395,8 +411,8 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     <div ref={containerRef} className="w-full h-full relative">
       <canvas ref={canvasRef} className="absolute inset-0" />
       {/* Title overlay */}
-      <div className="absolute top-2 left-3 text-xs text-gray-500 font-mono flex items-center gap-1.5">
-        <span className="pointer-events-none">Equilibrium</span>
+      <div className="absolute top-2 left-3 panel-title flex items-center gap-1.5">
+        <span className="pointer-events-none"><span className="panel-num">01 · </span>Equilibrium</span>
         <InfoPopup title="Magnetic Equilibrium" position="right">
           {equilibriumInfo}
         </InfoPopup>

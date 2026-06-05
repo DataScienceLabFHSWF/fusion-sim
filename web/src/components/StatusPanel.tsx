@@ -210,7 +210,7 @@ export default function StatusPanel({
       <div className="flex-1 flex flex-col justify-between">
       {/* Params & Stability */}
       <div>
-        <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-1">
+        <div className="flex items-center gap-2 panel-title mb-1.5">
           <span className="flex items-center gap-1">
             Plasma parameters
             <InfoPopup title="Plasma Parameters" position="right">{plasmaParamsInfo}</InfoPopup>

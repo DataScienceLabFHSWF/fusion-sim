@@ -141,7 +141,7 @@ export default function ProgramDischarge() {
   }
 
   const accentColor =
-    selected === 'hmode' ? '#22d3ee' : selected === 'lmode' ? '#fbbf24' : '#ef4444'
+    selected === 'hmode' ? '#e0a23a' : selected === 'lmode' ? '#56B4E9' : '#c8553d'
 
   return (
     <div className="page-enter min-h-screen flex flex-col items-center p-8 max-w-5xl mx-auto">
@@ -190,7 +190,7 @@ export default function ProgramDischarge() {
       {program && (
         <div className="w-full bg-gray-900 border border-gray-700 rounded-lg p-5 mb-8">
           <div className="flex items-baseline justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-300">
+            <h2 className="panel-title">
               Programmed Waveforms
             </h2>
             <span className="text-xs text-gray-500 font-mono">

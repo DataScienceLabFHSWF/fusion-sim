@@ -126,7 +126,7 @@ export default function DeviceSelect() {
         <p className="stagger-2 relative text-gray-400 text-lg sm:text-xl font-light tracking-wide z-10">
           Real-time tokamak discharge simulator
         </p>
-        <p className="stagger-2 relative text-gray-600 text-xs mt-3 tracking-widest uppercase z-10">
+        <p className="stagger-2 relative text-gray-500 text-sm mt-3 tracking-wide font-mono z-10">
           0D transport &middot; MHD equilibrium &middot; ELM dynamics &middot; Fusion diagnostics
         </p>
       </div>
@@ -228,14 +228,26 @@ export default function DeviceSelect() {
       {showTutorialPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm
                         animate-[fadeIn_0.3s_ease-out]">
-          <div className="bg-gray-950 border border-cyan-500/30 rounded-lg shadow-2xl shadow-cyan-500/10
+          <div className="bg-gray-950 border border-gray-700 rounded-lg shadow-2xl
                           max-w-md w-full mx-4 overflow-hidden animate-[slideUp_0.4s_ease-out]">
             {/* Accent bar */}
-            <div className="h-1 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-600" />
+            <div className="h-0.5 bg-cyan-500" />
 
             <div className="p-6">
               <div className="text-center mb-4">
-                <div className="text-3xl mb-2">⚛</div>
+                <svg
+                  className="w-9 h-9 mx-auto mb-3 text-cyan-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.25}
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+                  <ellipse cx="12" cy="12" rx="10" ry="4.2" />
+                  <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(60 12 12)" />
+                  <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(120 12 12)" />
+                </svg>
                 <h2 className="text-xl font-bold text-white mb-1">New to Fusion?</h2>
                 <p className="text-gray-400 text-sm">
                   Take a 2-minute guided tour of the control room to learn

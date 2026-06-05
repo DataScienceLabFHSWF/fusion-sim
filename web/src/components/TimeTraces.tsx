@@ -33,8 +33,7 @@ interface Props {
 export default function TimeTraces({ history, duration }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { theme } = useSettings()
-  const isModern = theme === 'modern'
+  useSettings()
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -56,7 +55,7 @@ export default function TimeTraces({ history, duration }: Props) {
     const totalH = TRACES.length * ROW_H
 
     // Clear
-    ctx.fillStyle = isModern ? '#08080a' : '#0a0e17'
+    ctx.fillStyle = '#0e0f11'
     ctx.fillRect(0, 0, W, totalH)
 
     const plotW = W - MARGIN_LEFT - MARGIN_RIGHT
@@ -69,13 +68,11 @@ export default function TimeTraces({ history, duration }: Props) {
       const h = ROW_H - MARGIN_TOP - MARGIN_BOTTOM
 
       // Row background
-      ctx.fillStyle = isModern
-        ? (row % 2 === 0 ? '#0a0a0d' : '#0e0e11')
-        : (row % 2 === 0 ? '#0d1117' : '#111827')
+      ctx.fillStyle = row % 2 === 0 ? '#111316' : '#15171b'
       ctx.fillRect(0, y0 - MARGIN_TOP, W, ROW_H)
 
       // Row separator
-      ctx.strokeStyle = isModern ? 'rgba(255,255,255,0.06)' : '#1f2937'
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)'
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(0, y0 + h + MARGIN_BOTTOM)
@@ -146,7 +143,7 @@ export default function TimeTraces({ history, duration }: Props) {
       ctx.setLineDash([])
       ctx.globalAlpha = 1
     }
-  }, [history, duration, isModern])
+  }, [history, duration])
 
   useEffect(() => {
     draw()

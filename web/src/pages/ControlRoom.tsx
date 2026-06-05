@@ -253,7 +253,13 @@ export default function ControlRoom() {
             className="px-1.5 sm:px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] sm:text-[11px] font-semibold
                        transition-colors cursor-pointer flex items-center gap-1"
           >
-            {showPlanner ? '✕' : '📋'}
+            {showPlanner ? (
+              '✕'
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931ZM19.5 7.125 16.875 4.5" />
+              </svg>
+            )}
             <span className="hidden sm:inline">{showPlanner ? 'Close' : 'Edit'}</span>
           </button>
         </div>
