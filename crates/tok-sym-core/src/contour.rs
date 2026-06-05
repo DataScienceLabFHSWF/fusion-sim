@@ -433,6 +433,111 @@ pub fn extract_separatrix(
     Contour { level: 0.0, points }
 }
 
+/// Nearest point on a (closed) polygon `wall` to point `p`, and the distance.
+fn nearest_on_wall(p: (f64, f64), wall: &[(f64, f64)]) -> ((f64, f64), f64) {
+    let mut best = (wall[0], f64::INFINITY);
+    for i in 0..wall.len() {
+        let a = wall[i];
+        let b = wall[(i + 1) % wall.len()];
+        let dx = b.0 - a.0;
+        let dy = b.1 - a.1;
+        let len2 = dx * dx + dy * dy;
+        let t = if len2 > 0.0 {
+            (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let c = (a.0 + t * dx, a.1 + t * dy);
+        let d = (p.0 - c.0).hypot(p.1 - c.1);
+        if d < best.1 {
+            best = (c, d);
+        }
+    }
+    best
+}
+
+/// Points strictly between `a` and `b`, spaced no more than `step` apart.
+fn interior_points(a: (f64, f64), b: (f64, f64), step: f64) -> Vec<(f64, f64)> {
+    let dist = (b.0 - a.0).hypot(b.1 - a.1);
+    let n = (dist / step).ceil() as usize; // number of segments
+    if n <= 1 {
+        return Vec::new();
+    }
+    (1..n)
+        .map(|k| {
+            let t = k as f64 / n as f64;
+            (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
+        })
+        .collect()
+}
+
+/// Extend open separatrix divertor legs to the limiter wall.
+///
+/// The analytic Cerfon-Freidberg legs "thin out" near the strike points, so
+/// marching-squares terminates them a short distance (typically 5–35 cm) before
+/// the wall, leaving the leg floating in the SOL. For each *open* chain
+/// (closed chains — the main LCFS — are left untouched), this connects each
+/// free endpoint to its nearest point on the wall (when within `max_gap`) with
+/// interpolated points spaced under `jump_thresh`, so the leg visibly reaches
+/// its strike point. Chains stay separated by jumps in the returned point list.
+pub fn extend_legs_to_wall(
+    points: &[(f64, f64)],
+    wall: &[(f64, f64)],
+    jump_thresh: f64,
+    max_gap: f64,
+) -> Vec<(f64, f64)> {
+    if points.len() < 2 || wall.len() < 2 {
+        return points.to_vec();
+    }
+
+    // Split into chains at jump discontinuities.
+    let mut chains: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut cur: Vec<(f64, f64)> = Vec::new();
+    for i in 0..points.len() {
+        if i > 0 {
+            let d = (points[i].0 - points[i - 1].0).hypot(points[i].1 - points[i - 1].1);
+            if d > jump_thresh {
+                chains.push(std::mem::take(&mut cur));
+            }
+        }
+        cur.push(points[i]);
+    }
+    if !cur.is_empty() {
+        chains.push(cur);
+    }
+
+    let step = jump_thresh * 0.7;
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    for chain in &chains {
+        if chain.len() < 2 {
+            out.extend_from_slice(chain);
+            continue;
+        }
+        let first = chain[0];
+        let last = chain[chain.len() - 1];
+        let closed = (first.0 - last.0).hypot(first.1 - last.1) < jump_thresh;
+        if closed {
+            out.extend_from_slice(chain);
+            continue;
+        }
+
+        // Prepend extension from the wall to the first endpoint.
+        let (wp0, d0) = nearest_on_wall(first, wall);
+        if d0 > 1e-3 && d0 <= max_gap {
+            out.push(wp0);
+            out.extend(interior_points(wp0, first, step));
+        }
+        out.extend_from_slice(chain);
+        // Append extension from the last endpoint to the wall.
+        let (wp1, d1) = nearest_on_wall(last, wall);
+        if d1 > 1e-3 && d1 <= max_gap {
+            out.extend(interior_points(last, wp1, step));
+            out.push(wp1);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
