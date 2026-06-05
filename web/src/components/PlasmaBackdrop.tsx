@@ -51,25 +51,25 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
       const { w, h, dpr } = dims
       if (w > 0 && h > 0) {
         const t = tMs / 1000
-        // Breathing: a primary ~6.5s cycle drives a core-glow pulse and a
-        // gentle radius expansion; a slower harmonic adds organic shimmer.
-        const breathe = Math.sin((t * 2 * Math.PI) / 6.5)
-        const breathe2 = Math.sin((t * 2 * Math.PI) / 11 + 1)
+        // Breathing: a slow ~10s cycle drives a subtle core-glow pulse and a
+        // small radius expansion; a slower harmonic adds gentle organic shimmer.
+        const breathe = Math.sin((t * 2 * Math.PI) / 10)
+        const breathe2 = Math.sin((t * 2 * Math.PI) / 16 + 1)
         const pulse = 0.5 + 0.5 * breathe                  // 0..1
 
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
         ctx.clearRect(0, 0, w, h)
 
         // Large plasma, axis pushed right so it bleeds off the right edge.
-        const a = h * 0.85 * (1 + 0.04 * breathe)          // ±4% radius breathing
+        const a = h * 0.85 * (1 + 0.02 * breathe)          // ±2% radius breathing
         const cx = w * 0.80
         const cy = h * 0.5
         const kappa = 1.55
         const delta = 0.45
         const N = 20
 
-        // Warm core bloom, pulsing (0.13 → 0.30).
-        const bloomA = 0.13 + 0.17 * pulse
+        // Warm core bloom, gently pulsing (0.13 → 0.22).
+        const bloomA = 0.13 + 0.09 * pulse
         const bloom = ctx.createRadialGradient(cx + a * 0.12, cy, 0, cx + a * 0.12, cy, a * 1.5)
         bloom.addColorStop(0, `rgba(252, 178, 98, ${bloomA})`)
         bloom.addColorStop(0.4, `rgba(210, 92, 48, ${bloomA * 0.32})`)
@@ -84,13 +84,13 @@ export default function PlasmaBackdrop({ className }: { className?: string }) {
           const rho = s / N
           const shift = a * 0.14 * (1 - rho)
           const [r, g, b] = inferno(1 - rho)
-          const alpha = (0.09 + 0.5 * Math.pow(1 - rho, 1.4)) * (0.82 + 0.18 * pulse)
+          const alpha = (0.09 + 0.5 * Math.pow(1 - rho, 1.4)) * (0.9 + 0.1 * pulse)
           ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
           ctx.beginPath()
           for (let k = 0; k <= steps; k++) {
             const th = (k / steps) * Math.PI * 2
-            // Per-surface ripple for a living-plasma shimmer.
-            const rr = rho * (1 + 0.018 * Math.sin(t * 0.9 + s * 0.55) * breathe2)
+            // Per-surface ripple for a subtle living-plasma shimmer.
+            const rr = rho * (1 + 0.009 * Math.sin(t * 0.55 + s * 0.55) * breathe2)
             const R = cx + shift + a * rr * Math.cos(th + delta * Math.sin(th))
             const Z = cy - a * rr * kappa * Math.sin(th)
             if (k === 0) ctx.moveTo(R, Z)
