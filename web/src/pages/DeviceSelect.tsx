@@ -117,8 +117,8 @@ export default function DeviceSelect() {
   return (
     <div className="page-enter relative">
       {/* ── Top nav (persists above everything) ── */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur">
-        <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+      <nav className="sticky top-0 z-50 flex items-center justify-between gap-4 px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur">
+        <span className="hidden sm:inline font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
           fusionsimulator<span className="text-gray-600">.io</span>
         </span>
         <div className="flex items-center gap-5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500">
@@ -140,7 +140,7 @@ export default function DeviceSelect() {
         {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />
         <div className="relative max-w-6xl mx-auto w-full z-10 -mt-12">
-          <h1 className="stagger-1 text-5xl sm:text-7xl font-bold tracking-tight text-white">
+          <h1 className="stagger-1 whitespace-nowrap text-[clamp(1.7rem,8.5vw,4.5rem)] font-bold tracking-tight text-white">
             fusionsimulator<span className="text-gray-600">.io</span>
           </h1>
           <p className="stagger-2 mt-4 text-gray-400 text-base sm:text-lg font-mono tracking-tight">

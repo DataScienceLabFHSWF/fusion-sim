@@ -93,6 +93,17 @@ export default function ControlRoom() {
   })()
   const progress = duration > 0 ? (time / duration) * 100 : 0
 
+  // Whether this discharge programs any ICH power — used to reserve the P_ICH
+  // power-balance row from the start so it doesn't pop in and shift the layout.
+  const usesIch = useMemo(() => {
+    try {
+      const prog = JSON.parse(programJson || '{}')
+      return Array.isArray(prog.p_ich) && prog.p_ich.some((pt: [number, number]) => pt[1] > 0)
+    } catch {
+      return false
+    }
+  }, [programJson])
+
   const handleDeviceChange = (newDeviceId: string) => {
     setActiveDevice(newDeviceId)
     setPlannerOverrides({})
@@ -310,6 +321,7 @@ export default function ControlRoom() {
             profileNeMax={state.profileNeMax}
             profilePMax={state.profilePMax}
             displayTime={displaySnapshot?.time ?? null}
+            usesIch={usesIch}
           />
         </div>
 

@@ -15,6 +15,7 @@ interface Props {
   profileNeMax: number
   profilePMax: number
   displayTime: number | null
+  usesIch?: boolean
 }
 
 export default function StatusPanel({
@@ -25,6 +26,7 @@ export default function StatusPanel({
   profileNeMax,
   profilePMax,
   displayTime,
+  usesIch = false,
 }: Props) {
   const [showProfiles, setShowProfiles] = useState(false)
   const [showPressure, setShowPressure] = useState(false)
@@ -249,7 +251,7 @@ export default function StatusPanel({
         </div>
 
         {/* Input / Output two-column power balance */}
-        <PowerBalance snapshot={s} fusion={fusion} />
+        <PowerBalance snapshot={s} fusion={fusion} usesIch={usesIch} />
       </div>
 
       {/* Divertor thermal loading */}
@@ -268,7 +270,7 @@ export default function StatusPanel({
 
 // ── Power Balance: Input vs Output columns ───────────────────────────
 
-function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: FusionState | null }) {
+function PowerBalance({ snapshot: s, fusion, usesIch }: { snapshot: Snapshot; fusion: FusionState | null; usesIch?: boolean }) {
   const isDT = fusion?.fuel_type === 'DT'
   const pAlpha = fusion?.p_alpha ?? 0
 
@@ -278,7 +280,9 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
     { label: <><sub>NBI</sub></>, value: s.prog_p_nbi, color: '#56B4E9' },
     { label: <><sub>ECH</sub></>, value: s.prog_p_ech, color: '#CC79A7' },
   ]
-  if (s.prog_p_ich > 0.01) {
+  // Reserve the ICH row for the whole discharge when this device programs ICH,
+  // so it doesn't pop in mid-ramp and shift the other rows.
+  if (usesIch || s.prog_p_ich > 0.01) {
     inputItems.push({ label: <><sub>ICH</sub></>, value: s.prog_p_ich, color: '#E69F00' })
   }
   // Alpha heating bar: always present for DT (shows 0 before fusion onset),

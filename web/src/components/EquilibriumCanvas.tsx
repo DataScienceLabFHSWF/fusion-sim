@@ -161,24 +161,37 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       ctx.restore()
     }
 
-    // --- Draw separatrix (clipped to wall) ---
+    // --- Draw separatrix ---
     if (snapshot && snapshot.separatrix && snapshot.separatrix.points.length > 2) {
+      const applySepStyle = () => {
+        if (isRetro) {
+          ctx.strokeStyle = '#33ff33'
+          ctx.lineWidth = 2
+          ctx.shadowColor = '#33ff33'
+          ctx.shadowBlur = 4
+        } else {
+          ctx.strokeStyle = '#facc15' // bright yellow
+          ctx.lineWidth = 2
+          ctx.shadowColor = '#facc15'
+          ctx.shadowBlur = 6
+        }
+      }
+
+      // Main separatrix body, clipped to the wall.
       ctx.save()
       buildWallPath()
       ctx.clip()
-
-      if (isRetro) {
-        ctx.strokeStyle = '#33ff33'
-        ctx.lineWidth = 2
-        ctx.shadowColor = '#33ff33'
-        ctx.shadowBlur = 4
-      } else {
-        ctx.strokeStyle = '#facc15' // bright yellow
-        ctx.lineWidth = 2
-        ctx.shadowColor = '#facc15'
-        ctx.shadowBlur = 6
-      }
+      applySepStyle()
       drawContour(ctx, snapshot.separatrix, toX, toY, jumpThresh)
+      ctx.shadowBlur = 0
+      ctx.restore()
+
+      // Divertor-leg extensions to the limiter strike points, drawn UNCLIPPED so
+      // they reach into the divertor (e.g. the DIII-D upper baffle slot) instead
+      // of being cut off at the main wall boundary.
+      ctx.save()
+      applySepStyle()
+      extendLegsToWall(ctx, snapshot.separatrix.points, wall, toX, toY, jumpThresh)
       ctx.shadowBlur = 0
       ctx.restore()
     }
@@ -419,6 +432,84 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       </div>
     </div>
   )
+}
+
+/**
+ * Extend open separatrix divertor legs to the limiter wall.
+ *
+ * The analytic flux legs thin out and the contour terminates short of the
+ * strike points. For each OPEN chain (the closed LCFS is skipped), extend each
+ * free endpoint along its outgoing tangent until it hits the wall (forward
+ * ray-cast, within `maxExtend`). Tangent extension continues the leg's natural
+ * direction, so it doesn't curl back like a nearest-point connector would.
+ */
+function extendLegsToWall(
+  ctx: CanvasRenderingContext2D,
+  points: [number, number][],
+  wall: [number, number][],
+  toX: (r: number) => number,
+  toY: (z: number) => number,
+  jumpThresh: number,
+  maxExtend = 0.5,
+) {
+  if (points.length < 4 || wall.length < 3) return
+
+  // Forward ray (unit dir d from p) vs wall polygon → nearest hit point or null.
+  const rayHit = (px: number, py: number, dx: number, dy: number): [number, number] | null => {
+    let bestT = Infinity
+    let hit: [number, number] | null = null
+    for (let i = 0; i < wall.length; i++) {
+      const a = wall[i]
+      const b = wall[(i + 1) % wall.length]
+      const v1x = px - a[0], v1y = py - a[1]
+      const v2x = b[0] - a[0], v2y = b[1] - a[1]
+      const v3x = -dy, v3y = dx
+      const denom = v2x * v3x + v2y * v3y
+      if (Math.abs(denom) < 1e-9) continue
+      const t = (v2x * v1y - v2y * v1x) / denom // distance along ray (d is unit)
+      const s = (v1x * v3x + v1y * v3y) / denom // position on segment
+      if (t > 1e-4 && t < bestT && s >= 0 && s <= 1) {
+        bestT = t
+        hit = [px + t * dx, py + t * dy]
+      }
+    }
+    return hit && bestT <= maxExtend ? hit : null
+  }
+
+  // Split into chains at jumps.
+  const chains: [number, number][][] = []
+  let cur: [number, number][] = []
+  for (let i = 0; i < points.length; i++) {
+    if (i > 0) {
+      const d = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1])
+      if (d > jumpThresh) { chains.push(cur); cur = [] }
+    }
+    cur.push(points[i])
+  }
+  if (cur.length) chains.push(cur)
+
+  const extend = (end: [number, number], back: [number, number]) => {
+    let dx = end[0] - back[0]
+    let dy = end[1] - back[1]
+    const n = Math.hypot(dx, dy)
+    if (n < 1e-9) return
+    dx /= n; dy /= n
+    const h = rayHit(end[0], end[1], dx, dy)
+    if (!h) return
+    ctx.beginPath()
+    ctx.moveTo(toX(end[0]), toY(end[1]))
+    ctx.lineTo(toX(h[0]), toY(h[1]))
+    ctx.stroke()
+  }
+
+  for (const ch of chains) {
+    if (ch.length < 4) continue
+    const f = ch[0]
+    const l = ch[ch.length - 1]
+    if (Math.hypot(f[0] - l[0], f[1] - l[1]) < jumpThresh) continue // closed loop
+    extend(l, ch[ch.length - 4]) // outgoing tangent at the last point
+    extend(f, ch[3]) // outgoing tangent at the first point
+  }
 }
 
 /**
