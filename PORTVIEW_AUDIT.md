@@ -2,6 +2,17 @@
 
 Audit of `web/src/components/portview/` (the three.js first-person tokamak interior view), with improvement proposals for first-wall realism, plasma appearance, divertor strike-point glow, and ELM visualization. Reference points: DIII-D interior photos (segmented graphite tiles with bolt holes, diagnostic port bands, recessed ICH/helicon antennas), the JET interior (ICRH Faraday screens, inboard guard limiter ribs, iridescent thermal discoloration on the centre column), and the DIII-D unwrapped diagnostic/port map.
 
+> **Status — branch `portview-v2`:** items 1–4, 6, 9, and 12 of the priority
+> table (§9) are implemented: all §2 housekeeping fixes, physics-driven strike
+> glow with blackbody tile incandescence (§4, minus the detachment blob),
+> procedural tile relief with bolt holes / grain / heat-discoloration rings
+> (§3.1), ELM event envelope with outboard localization (§5.1), helical
+> field-aligned ELM filaments driven by q95 and elm_energy_loss (§5.2), and
+> the plasma color/H-mode quick wins (§6). Still open: detachment radiating
+> blob, RF antenna geometry (§3.2), recessed hero ports (§3.3), divertor/
+> centre-column geometry (§3.4), disruption choreography (§7), ring-light
+> integral for wall illumination, and camera work.
+
 ---
 
 ## 1. How it works today

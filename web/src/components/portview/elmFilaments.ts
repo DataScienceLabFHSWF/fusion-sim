@@ -175,8 +175,9 @@ export function createElmFilamentGroup(): ElmFilamentGroup {
     // Filament count scales with the ELM size (n ≈ 10–20 in experiment;
     // we render the handful on the visible side of the torus)
     const count = Math.min(6 + Math.round(amp * 6), MAX_FILAMENTS)
-    // Edge field-line pitch — q95 with a floor so the helix never degenerates
-    const pitch = Math.max(Math.abs(q95), 2.0)
+    // Edge field-line pitch — q95 clamped so the helix neither degenerates
+    // (low q) nor wraps into an unreadable coil (transient high q values)
+    const pitch = Math.min(Math.max(Math.abs(q95), 2.0), 8.0)
     for (let i = 0; i < count; i++) {
       const f = filaments[i]
       const s1 = time * 37.7 + i * 13.1
