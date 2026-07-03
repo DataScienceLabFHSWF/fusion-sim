@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { Contour } from '../../lib/types'
 import type { PortConfig } from './types'
 import { truncateAtWall, subsample, splitChains, densifyContour } from './types'
+import { createElmFilamentGroup } from './elmFilaments'
 
 // ── Separatrix: mesh-based volumetric rendering ──
 // The separatrix is rendered as multiple thin toroidal mesh shells with
@@ -42,9 +43,17 @@ const FRESNEL_EXPONENT = 2.0
 // ~30-60 overlapping fragments → bright misty limb + bloom.
 const SEP_BASE_INTENSITY = 0.10
 
-// ELM flash parameters
-const ELM_FLASH_MULT = 5.0
-const ELM_WHITE_SHIFT = 0.3
+// ── ELM event parameters ──
+// An ELM is an *event*, not a state: the elm_active rising edge triggers an
+// envelope (fast attack, exponential decay) localized to the outboard
+// midplane where ballooning modes erupt, plus a burst of field-aligned
+// filaments (see elmFilaments.ts). Timescales are stretched ~100× from the
+// real sub-millisecond crash so the eruption is visible.
+const ELM_FLASH_GAIN = 4.0     // peak extra brightness (× base) at weight 1
+const ELM_WHITE_SHIFT = 0.3    // color shift toward white at the peak
+const ELM_ATTACK = 0.05        // seconds to peak
+const ELM_DECAY_TAU = 0.12     // brightness e-folding after the peak
+const ELM_MAX_AGE = 0.7        // envelope considered over after this
 
 /** GLSL-style smoothstep: Hermite interpolation clamped to [0,1]. */
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -68,11 +77,12 @@ export interface PlasmaGroup {
   sepMaterial: THREE.MeshBasicMaterial
   legMaterial: THREE.MeshBasicMaterial
   update: (params: PlasmaUpdateParams) => void
+  /** Animate time-based effects (ELM filaments) at display rate. */
+  tick: (time: number) => void
 }
 
 export interface PlasmaUpdateParams {
   separatrix: Contour
-  fluxSurfaces: Contour[]
   axisR: number
   axisZ: number
   xpointR: number
@@ -82,9 +92,14 @@ export interface PlasmaUpdateParams {
   inHmode: boolean
   elmActive: boolean
   te0: number
-  betaN: number
+  /** Edge safety factor — sets the ELM filament field-line pitch */
+  q95: number
+  /** Energy lost by the last ELM crash (MJ) — scales the eruption */
+  elmEnergyLoss?: number
   opacity: number
   limiterPts: [number, number][]
+  /** Scene clock (seconds) for event envelopes */
+  time: number
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -298,8 +313,10 @@ function clipOutboardBridge(
 }
 
 /**
- * Rebuild separatrix positions and per-vertex baseBrightness into
- * pre-allocated buffers.  Returns the active vertex/index counts.
+ * Rebuild separatrix positions, per-vertex baseBrightness, and per-vertex
+ * ELM weight (outboard-midplane localization) into pre-allocated buffers.
+ * Returns the active vertex/index counts plus the processed boundary contour
+ * and its normals (consumed by the ELM filament system).
  */
 function rebuildSepGeometry(
   cfg: PortConfig,
@@ -307,11 +324,13 @@ function rebuildSepGeometry(
   camPos: THREE.Vector3,
   positions: Float32Array,
   baseBright: Float32Array,
+  elmWeight: Float32Array,
   indices: Uint32Array,
-  xpR = 0, xpZ = 0, xpUR = 0, xpUZ = 0, axisR = 0,
-): { vertCount: number; idxCount: number } {
+  xpR = 0, xpZ = 0, xpUR = 0, xpUZ = 0, axisR = 0, axisZ = 0,
+): { vertCount: number; idxCount: number; contour: [number, number][]; normals: [number, number][] } {
+  const empty = { vertCount: 0, idxCount: 0, contour: [] as [number, number][], normals: [] as [number, number][] }
   const chains = splitChains(sepPts)
-  if (chains.length === 0) return { vertCount: 0, idxCount: 0 }
+  if (chains.length === 0) return empty
 
   // For negative triangularity: clip the outboard bridge from the main chain
   const clipped = clipOutboardBridge(chains[0], xpR, xpZ, xpUR, xpUZ, axisR)
@@ -321,7 +340,7 @@ function rebuildSepGeometry(
   const sampled = subsample(densified, SEP_CONTOUR_PTS)
   const mainLoop = smoothContour(sampled, 3)
   const nPts = mainLoop.length
-  if (nPts < 4) return { vertCount: 0, idxCount: 0 }
+  if (nPts < 4) return empty
 
   // Check if the main loop is closed (first ≈ last point)
   let avgSpacing = 0
@@ -424,6 +443,12 @@ function rebuildSepGeometry(
         // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
         baseBright[vi] = SEP_BASE_INTENSITY * fresnel * dFade
 
+        // ELM localization weight: strongest at the outboard midplane
+        // (ballooning-unstable side), fading toward the inboard/top/bottom.
+        const outb = Math.max(0, Math.min(1, (R - axisR) / Math.max(rMax - axisR, 0.2)))
+        const zg = Math.exp(-((Z - axisZ) * (Z - axisZ)) / 0.72)  // σ ≈ 0.6 m
+        elmWeight[vi] = 0.25 + 0.75 * outb * zg
+
         vi++
       }
     }
@@ -446,7 +471,7 @@ function rebuildSepGeometry(
     }
   }
 
-  return { vertCount: vi, idxCount: ii }
+  return { vertCount: vi, idxCount: ii, contour: mainLoop, normals: cNormals }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -726,6 +751,7 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   const sepPositions = new Float32Array(SEP_MAX_VERTS * 3)
   const sepColors = new Float32Array(SEP_MAX_VERTS * 3)
   const sepBaseBright = new Float32Array(SEP_MAX_VERTS)
+  const sepElmWeight = new Float32Array(SEP_MAX_VERTS)
   const sepIdxBuf = new Uint32Array(SEP_MAX_INDICES)
 
   const sepGeom = new THREE.BufferGeometry()
@@ -776,6 +802,22 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   let legIdxCount = 0
   let legFP = ''
 
+  // ═══ ELM FILAMENTS + EVENT ENVELOPE ═══
+  const filaments = createElmFilamentGroup()
+  group.add(filaments.group)
+  let elmPrevActive = false
+  let elmT0 = -Infinity   // scene-clock time of the last ELM crash
+  let elmAmp = 0          // per-event amplitude from elm_energy_loss
+
+  /** Event envelope: fast attack, exponential decay. */
+  const elmEnvelope = (time: number): number => {
+    const dt = time - elmT0
+    if (dt < 0 || dt > ELM_MAX_AGE) return 0
+    return dt < ELM_ATTACK
+      ? dt / ELM_ATTACK
+      : Math.exp(-(dt - ELM_ATTACK) / ELM_DECAY_TAU)
+  }
+
   // ═══ UPDATE (hot path — called every frame) ═══
   const update = (params: PlasmaUpdateParams) => {
     const sepPts = params.separatrix.points
@@ -791,8 +833,19 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     baseColor.g = 0.15 + tempFrac * 0.10   // 0.15 → 0.25
     baseColor.b = 0.45 + tempFrac * 0.15   // 0.45 → 0.60
 
-    const elmMult = params.elmActive ? ELM_FLASH_MULT : 1.0
-    const elmW = params.elmActive ? ELM_WHITE_SHIFT : 0.0
+    // ── ELM event: trigger on the rising edge of elm_active ──
+    if (params.elmActive && !elmPrevActive) {
+      elmT0 = params.time
+      // Scale the eruption with the crash energy (MJ): DIII-D-size ELMs
+      // (~30 kJ) ≈ 1.0, JET/ITER-size crashes saturate at 1.6.
+      const loss = Math.max(params.elmEnergyLoss ?? 0, 0)
+      elmAmp = Math.min(0.6 + Math.sqrt(loss) * 2.5, 1.6)
+      filaments.spawn(params.time, params.q95, elmAmp)
+    }
+    elmPrevActive = params.elmActive
+    const elmEnv = elmEnvelope(params.time) * elmAmp
+    filaments.update(params.time)
+
     const opacity = params.opacity
 
     // ── Separatrix ──
@@ -806,28 +859,47 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       // FULL REBUILD: contour geometry changed
       const result = rebuildSepGeometry(
         cfg, sepPts, camPos,
-        sepPositions, sepBaseBright, sepIdxBuf,
-        params.xpointR, params.xpointZ, params.xpointUpperR, params.xpointUpperZ, params.axisR,
+        sepPositions, sepBaseBright, sepElmWeight, sepIdxBuf,
+        params.xpointR, params.xpointZ, params.xpointUpperR, params.xpointUpperZ,
+        params.axisR, params.axisZ,
       )
       sepVertCount = result.vertCount
       sepIdxCount = result.idxCount
       sepFP = newFP
       sepPosAttr.needsUpdate = true
       sepIdxAttr.needsUpdate = true
+      // Hand the processed boundary to the filament system so ELM ropes are
+      // born on the current equilibrium shape.
+      if (result.contour.length > 0) {
+        filaments.setBoundary(result.contour, result.normals, params.axisR, params.axisZ)
+      }
     }
 
     // COLOR UPDATE (every frame — cheap per-vertex multiply)
     if (sepVertCount > 0) {
-      const cr = (baseColor.r + elmW)
-      const cg = (baseColor.g + elmW)
-      const cb = (baseColor.b + elmW)
-      const scale = opacity * elmMult
+      const cr = baseColor.r
+      const cg = baseColor.g
+      const cb = baseColor.b
+      const scale = opacity
 
-      for (let i = 0; i < sepVertCount; i++) {
-        const b = sepBaseBright[i] * scale
-        sepColors[i * 3] = cr * b
-        sepColors[i * 3 + 1] = cg * b
-        sepColors[i * 3 + 2] = cb * b
+      if (elmEnv > 0.001) {
+        // ELM flash: brightness boost + white shift, localized to the
+        // outboard midplane by the per-vertex weight.
+        for (let i = 0; i < sepVertCount; i++) {
+          const w = sepElmWeight[i] * elmEnv
+          const b = sepBaseBright[i] * scale * (1 + ELM_FLASH_GAIN * w)
+          const shift = ELM_WHITE_SHIFT * w
+          sepColors[i * 3] = (cr + shift) * b
+          sepColors[i * 3 + 1] = (cg + shift) * b
+          sepColors[i * 3 + 2] = (cb + shift) * b
+        }
+      } else {
+        for (let i = 0; i < sepVertCount; i++) {
+          const b = sepBaseBright[i] * scale
+          sepColors[i * 3] = cr * b
+          sepColors[i * 3 + 1] = cg * b
+          sepColors[i * 3 + 2] = cb * b
+        }
       }
       sepColAttr.needsUpdate = true
       sepGeom.setDrawRange(0, sepIdxCount)
@@ -854,11 +926,13 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       }
 
       if (legVertCount > 0) {
-        // Apply ELM flash to leg colors (same as separatrix)
-        const lr = (legColor.r + elmW)
-        const lg = (legColor.g + elmW)
-        const lb = (legColor.b + elmW)
-        const lScale = opacity * elmMult
+        // ELM flash on the legs: the particle burst arrives at the divertor —
+        // uniform along the legs, slightly weaker than the midplane flash.
+        const legEnv = elmEnv * 0.7
+        const lr = (legColor.r + ELM_WHITE_SHIFT * legEnv)
+        const lg = (legColor.g + ELM_WHITE_SHIFT * legEnv)
+        const lb = (legColor.b + ELM_WHITE_SHIFT * legEnv)
+        const lScale = opacity * (1 + ELM_FLASH_GAIN * legEnv)
         for (let i = 0; i < legVertCount; i++) {
           const b = legBaseBright[i] * lScale
           legColors[i * 3] = lr * b
@@ -876,5 +950,9 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     }
   }
 
-  return { group, sepMaterial, legMaterial, update }
+  const tick = (time: number) => {
+    filaments.update(time)
+  }
+
+  return { group, sepMaterial, legMaterial, update, tick }
 }

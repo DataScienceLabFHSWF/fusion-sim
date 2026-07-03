@@ -100,6 +100,12 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     let rafRunning = false
     const animate = () => {
       state.animFrameId = requestAnimationFrame(animate)
+      // Time-based animation (glow shimmer, ELM filaments) runs at display
+      // rate here; simulation-driven state updates arrive via the snapshot
+      // effect at physics-tick rate.
+      const t = state.clock.getElapsedTime()
+      state.plasmaGroup?.tick(t)
+      state.glowGroup?.tick(t)
       postProcessing.composer.render()
     }
     const startLoop = () => {
@@ -351,7 +357,6 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     if (state.plasmaGroup && pts && !snapshot.disrupted) {
       state.plasmaGroup.update({
         separatrix: snapshot.separatrix,
-        fluxSurfaces: snapshot.flux_surfaces,
         axisR: snapshot.axis_r,
         axisZ: snapshot.axis_z,
         xpointR: snapshot.xpoint_r,
@@ -361,9 +366,11 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         inHmode: snapshot.in_hmode,
         elmActive: snapshot.elm_active,
         te0: snapshot.te0,
-        betaN: snapshot.beta_n,
+        q95: snapshot.q95,
+        elmEnergyLoss: snapshot.elm_energy_loss,
         opacity: opacityScale,
         limiterPts: pts,
+        time: state.clock.getElapsedTime(),
       })
     }
 

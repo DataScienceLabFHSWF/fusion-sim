@@ -32,6 +32,8 @@ export interface GlowGroup {
   group: THREE.Group
   pixelRatio: number  // stored externally, used for size scaling
   update: (params: GlowUpdateParams) => void
+  /** Re-run the shimmer/flicker animation at display rate between sim ticks. */
+  tick: (time: number) => void
 }
 
 export interface StrikePoint {
@@ -54,8 +56,9 @@ export interface GlowUpdateParams {
 /**
  * Create a canvas-based Gaussian glow texture for point sprites.
  * Radial falloff matches the original shader: exp(-r * 3.0)
+ * Shared by the strike glow and the ELM filament system.
  */
-function createGlowTexture(size = 64): THREE.CanvasTexture {
+export function createGlowTexture(size = 64): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -154,11 +157,13 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
 
   let activeCount = 0
   let lastStrikeFP = ''
+  let lastParams: GlowUpdateParams | null = null
 
   // Phi range constants
   const phiSpan = cfg.phiMax - cfg.phiMin
 
   const update = (params: GlowUpdateParams) => {
+    lastParams = params
     if (params.strikePoints.length === 0 || params.intensity <= 0) {
       points.visible = false
       activeCount = 0
@@ -249,11 +254,17 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
     points.visible = true
   }
 
+  const tick = (time: number) => {
+    if (!lastParams || activeCount === 0) return
+    update({ ...lastParams, time })
+  }
+
   return {
     group,
     get pixelRatio() { return storedPixelRatio },
     set pixelRatio(v: number) { storedPixelRatio = v },
     update,
+    tick,
   }
 }
 
