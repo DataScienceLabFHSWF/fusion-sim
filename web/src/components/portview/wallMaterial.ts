@@ -8,44 +8,6 @@ export interface StrikePointUniform {
   x: number; y: number; z: number; intensity: number
 }
 
-const MAX_PORTS = 32
-
-/**
- * Create a 32×2 RGBA Float DataTexture encoding extra port positions.
- * Stores port centers in **Cartesian** coordinates so the fragment shader
- * can use simple 3D Euclidean distance (robust, no coordinate transform issues).
- *
- * Row 0: (centerX, centerY, centerZ, radius) per port
- * Row 1: (zRadius, 0, 0, 0) per port
- */
-export function createPortDataTexture(ports: ResolvedPort[]): THREE.DataTexture {
-  const data = new Float32Array(MAX_PORTS * 2 * 4) // 32 wide × 2 tall × RGBA
-  for (let i = 0; i < Math.min(ports.length, MAX_PORTS); i++) {
-    const p = ports[i]
-    // Convert (R, Z, phi) → Cartesian (x, y, z)
-    const cx = p.wallR * Math.cos(p.phi)
-    const cy = p.wallR * Math.sin(p.phi)
-    const cz = p.wallZ
-    // Row 0: (x, y, z, radius)
-    const r0 = i * 4
-    data[r0]     = cx
-    data[r0 + 1] = cy
-    data[r0 + 2] = cz
-    data[r0 + 3] = p.radius
-    // Row 1: (zRadius, 0, 0, 0)
-    const r1 = (MAX_PORTS + i) * 4
-    data[r1]     = p.zRadius
-    data[r1 + 1] = 0
-    data[r1 + 2] = 0
-    data[r1 + 3] = 0
-  }
-  const tex = new THREE.DataTexture(data, MAX_PORTS, 2, THREE.RGBAFormat, THREE.FloatType)
-  tex.minFilter = THREE.NearestFilter
-  tex.magFilter = THREE.NearestFilter
-  tex.needsUpdate = true
-  return tex
-}
-
 /**
  * Create the custom ShaderMaterial for wall tiles.
  */
@@ -135,59 +97,6 @@ export function updateStrikePoints(
     }
   }
   material.uniforms.u_nStrikePoints.value = n
-}
-
-/**
- * Material for extra port decal discs — very dark circles that sit on
- * the wall surface, simulating recessed port openings.
- *
- * Uses polygonOffset to win the depth test against the coplanar wall
- * geometry (a standard decal technique). The radial gradient makes the
- * center nearly black (deep recess) with a slightly lighter rim and
- * a thin bright edge suggesting a metal lip.
- */
-export function createExtraPortMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    vertexShader: `
-      varying vec2 v_uv;
-      varying vec3 v_normal;
-      varying vec3 v_viewDir;
-      void main() {
-        v_uv = uv;
-        v_normal = normalize(normalMatrix * normal);
-        vec4 worldPos = modelMatrix * vec4(position, 1.0);
-        v_viewDir = normalize(cameraPosition - worldPos.xyz);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      precision highp float;
-      varying vec2 v_uv;
-      varying vec3 v_normal;
-      varying vec3 v_viewDir;
-      void main() {
-        // Distance from disc center (0 at center, 1 at edge)
-        float dist = length(v_uv - 0.5) * 2.0;
-
-        // Radial depth gradient: nearly black center, slightly lighter rim
-        float shade = mix(0.008, 0.035, dist * dist);
-
-        // Subtle rim highlight from viewing angle
-        float NdotV = abs(dot(normalize(v_normal), normalize(v_viewDir)));
-        shade *= 0.6 + 0.4 * NdotV;
-
-        // Thin bright rim at the very edge to suggest a metal lip
-        float rim = smoothstep(0.88, 0.95, dist) * (1.0 - smoothstep(0.95, 1.0, dist));
-        shade += rim * 0.06 * NdotV;
-
-        gl_FragColor = vec4(vec3(shade), 1.0);
-      }
-    `,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -4,
-  })
 }
 
 /**

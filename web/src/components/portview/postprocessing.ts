@@ -25,10 +25,10 @@ export function createPostProcessing(
   const renderPass = new RenderPass(scene, camera)
   composer.addPass(renderPass)
 
-  // Bloom pass — selective bloom via emissive materials
-  // Lower threshold (0.5) lets moderate brightness lines create subtle glow.
-  // Higher strength (0.8) and radius (0.5) create the soft halo that
-  // replaces Canvas 2D's multi-pass strokes at widths 9/6/3.5/1.5px.
+  // Bloom pass — selective bloom via emissive materials.
+  // The threshold lets moderate-brightness plasma lines and glow sprites
+  // bloom into a soft halo; strength/radius are tuned by eye against the
+  // separatrix limb and strike-point glow.
   const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(Math.ceil(size.x / 2), Math.ceil(size.y / 2)),
     0.7,   // strength — soft glow halo

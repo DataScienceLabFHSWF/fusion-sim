@@ -92,12 +92,28 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     }
     stateRef.current = state
 
-    // Animation loop
+    // Animation loop — paused while the tab is hidden to save GPU/battery.
+    let rafRunning = false
     const animate = () => {
       state.animFrameId = requestAnimationFrame(animate)
       postProcessing.composer.render()
     }
-    animate()
+    const startLoop = () => {
+      if (rafRunning) return
+      rafRunning = true
+      animate()
+    }
+    const stopLoop = () => {
+      if (!rafRunning) return
+      rafRunning = false
+      cancelAnimationFrame(state.animFrameId)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') stopLoop()
+      else startLoop()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    startLoop()
 
     // Resize handler
     const onResize = () => {
@@ -119,8 +135,19 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     resizeObserver.observe(container)
 
     return () => {
-      cancelAnimationFrame(state.animFrameId)
+      stopLoop()
+      document.removeEventListener('visibilitychange', onVisibility)
       resizeObserver.disconnect()
+      // Dispose all GPU resources — geometry rebuilds dispose the previous
+      // generation, but the final generation must be released here.
+      scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        const mat = (mesh as THREE.Mesh).material
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+        else if (mat) mat.dispose()
+      })
+      postProcessing.composer.dispose()
       renderer.dispose()
       container.removeChild(renderer.domElement)
       stateRef.current = null
@@ -150,20 +177,31 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     }
     if (!pts || pts.length < 4) return
 
-    // Remove old geometry
+    // Remove old geometry and release its GPU resources
+    const disposeObject = (obj: THREE.Object3D) => {
+      obj.traverse((o) => {
+        const mesh = o as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        const mat = mesh.material
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+        else if (mat) mat.dispose()
+      })
+    }
     if (state.wallMesh) {
       state.scene.remove(state.wallMesh)
-      state.wallMesh.geometry.dispose()
+      disposeObject(state.wallMesh)
     }
     if (state.portMesh) {
       state.scene.remove(state.portMesh)
-      state.portMesh.geometry.dispose()
+      disposeObject(state.portMesh)
     }
     if (state.plasmaGroup) {
       state.scene.remove(state.plasmaGroup.group)
+      disposeObject(state.plasmaGroup.group)
     }
     if (state.glowGroup) {
       state.scene.remove(state.glowGroup.group)
+      disposeObject(state.glowGroup.group)
     }
 
     // Build wall

@@ -41,26 +41,6 @@ varying float v_region;
 varying float v_tileHash;
 varying float v_depth;
 
-// Test whether a fragment falls inside any extra port opening.
-// Returns 0.0 outside all ports, 1.0 at the center of a port.
-// Port centers are stored as uniform vec4(x, y, z, radius) in Cartesian.
-// Iterates all 24 slots; empty ports have radius=0 and are skipped.
-float portTest(vec3 worldPos) {
-  float maxInside = 0.0;
-  for (int i = 0; i < 64; i++) {
-    vec4 port = u_extraPorts[i];
-    float rr = port.w;
-    if (rr < 0.001) continue; // empty slot
-    vec3 center = port.xyz;
-    float dist = length(worldPos - center);
-    if (dist > rr * 1.5) continue; // quick reject
-    float normDist = dist / rr;
-    float inside = 1.0 - smoothstep(0.7, 1.0, normDist);
-    maxInside = max(maxInside, inside);
-  }
-  return maxInside;
-}
-
 float gridProximity(vec2 pos, vec2 spacing) {
   vec2 cell = pos / spacing;
   vec2 f = fract(cell);
@@ -165,6 +145,7 @@ void main() {
   float fragZ = v_worldPos.z;
 
   for (int i = 0; i < 64; i++) {
+    if (i >= u_nExtraPorts) break;
     vec4 port = u_extraPorts[i];
     if (port.w < 0.001) continue; // empty slot
     vec4 pinfo = u_extraPortInfo[i];
