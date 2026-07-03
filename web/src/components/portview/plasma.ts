@@ -96,6 +96,14 @@ export interface PlasmaUpdateParams {
   q95: number
   /** Energy lost by the last ELM crash (MJ) — scales the eruption */
   elmEnergyLoss?: number
+  /** Greenwald density fraction — denser edge recycles/glows brighter */
+  fGreenwald: number
+  /** Core impurity fraction (carbon) — subtle blue-green tinge */
+  impurityFraction: number
+  /** Neon seeding rate (10²⁰/s) — shifts the edge glow orange-red */
+  neonPuff: number
+  /** Radiated power fraction p_rad/p_loss — a radiative edge emits more */
+  pRadFrac: number
   opacity: number
   limiterPts: [number, number][]
   /** Scene clock (seconds) for event envelopes */
@@ -327,8 +335,15 @@ function rebuildSepGeometry(
   elmWeight: Float32Array,
   indices: Uint32Array,
   xpR = 0, xpZ = 0, xpUR = 0, xpUZ = 0, axisR = 0, axisZ = 0,
+  inHmode = false,
 ): { vertCount: number; idxCount: number; contour: [number, number][]; normals: [number, number][] } {
   const empty = { vertCount: 0, idxCount: 0, contour: [] as [number, number][], normals: [] as [number, number][] }
+  // H-mode pedestal: the edge steepens into a transport barrier — tighten
+  // the shell stack and sharpen the limb so the boundary reads as a crisp
+  // skin; L-mode keeps the broad fuzzy profile. (inHmode is part of the
+  // contour fingerprint, so the L-H transition triggers this rebuild.)
+  const shellScale = inHmode ? 0.65 : 1.0
+  const fresnelExp = inHmode ? 2.6 : FRESNEL_EXPONENT
   const chains = splitChains(sepPts)
   if (chains.length === 0) return empty
 
@@ -389,7 +404,7 @@ function rebuildSepGeometry(
 
   for (let sh = 0; sh < N_SHELLS; sh++) {
     const shellBase = sh * nSlices * nPts
-    const offset = SHELL_OFFSETS[sh]
+    const offset = SHELL_OFFSETS[sh] * shellScale
     // Golden-ratio-based stagger so no two shells align
     const phiStagger = phiStep * ((sh * 0.618) % 1.0)
 
@@ -437,7 +452,7 @@ function rebuildSepGeometry(
         const NdotV = Math.abs((nx * vx + ny * vy + nz * vz) / vLen)
 
         // Fresnel: transparent face-on (NdotV≈1), bright edge-on (NdotV≈0)
-        let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), FRESNEL_EXPONENT)
+        let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), fresnelExp)
         fresnel *= smoothstep(0.08, 0.35, fresnel)
 
         // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
@@ -833,6 +848,19 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     baseColor.g = 0.15 + tempFrac * 0.10   // 0.15 → 0.25
     baseColor.b = 0.45 + tempFrac * 0.15   // 0.45 → 0.60
 
+    // Impurity tints: carbon pulls faintly blue-green; neon seeding pulls
+    // the edge glow orange-red (its strongest visible lines are red).
+    const imp = Math.min(Math.max(params.impurityFraction, 0) * 20, 1)
+    const neon = Math.min(Math.max(params.neonPuff, 0) / 2, 1)
+    baseColor.r += neon * 0.08 - imp * 0.04
+    baseColor.g += imp * 0.06
+    baseColor.b -= neon * 0.12 - imp * 0.02
+
+    // Edge emission scales with density (recycling light) and radiated
+    // power fraction (a radiative edge is a brighter edge).
+    const fGW = Math.min(Math.max(params.fGreenwald, 0), 1.2)
+    const emission = (0.6 + 0.55 * fGW) * (1 + Math.min(Math.max(params.pRadFrac, 0), 1) * 0.4)
+
     // ── ELM event: trigger on the rising edge of elm_active ──
     if (params.elmActive && !elmPrevActive) {
       elmT0 = params.time
@@ -846,7 +874,7 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     const elmEnv = elmEnvelope(params.time) * elmAmp
     filaments.update(params.time)
 
-    const opacity = params.opacity
+    const opacity = params.opacity * emission
 
     // ── Separatrix ──
     const newFP = contourFingerprint(
@@ -861,7 +889,7 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
         cfg, sepPts, camPos,
         sepPositions, sepBaseBright, sepElmWeight, sepIdxBuf,
         params.xpointR, params.xpointZ, params.xpointUpperR, params.xpointUpperZ,
-        params.axisR, params.axisZ,
+        params.axisR, params.axisZ, params.inHmode,
       )
       sepVertCount = result.vertCount
       sepIdxCount = result.idxCount
