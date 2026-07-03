@@ -1,13 +1,14 @@
 import { useRef, useEffect, useCallback } from 'react'
 import * as THREE from 'three'
 import type { Snapshot } from '../../lib/types'
-import { getPortConfig, DEVICE_OPACITY_SCALE, DEFAULT_OPACITY_SCALE, DEVICE_POWER_SCALE, DEFAULT_POWER_SCALE, DEVICE_GLOW_TUNING, DEFAULT_GLOW_TUNING } from './config'
+import { getPortConfig, DEVICE_OPACITY_SCALE, DEFAULT_OPACITY_SCALE, DEVICE_GLOW_TUNING, DEFAULT_GLOW_TUNING } from './config'
 import { createCamera, updateCamera } from './camera'
 import { buildWallGeometry, buildPortGeometry, resolveExtraPortPositions } from './geometry'
 import { createWallMaterial, createPortMaterial, setExtraPortUniforms, updateStrikePoints } from './wallMaterial'
 import { createPlasmaGroup } from './plasma'
 import { createGlowGroup, findStrikePoints, type StrikePoint } from './glow'
 import { createPostProcessing } from './postprocessing'
+import { DivertorVisuals } from './divertorVisuals'
 import { toroidal } from './types'
 
 interface Props {
@@ -39,7 +40,10 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
   const containerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<SceneState | null>(null)
   const glowIntensityRef = useRef(0)
-  const frozenStrikePointsRef = useRef<StrikePoint[]>([])
+  // Strike positions low-pass filtered (EMA) — tracks slow equilibrium drift
+  // (strike sweeps, ramp-down) without frame-to-frame jitter.
+  const emaStrikePointsRef = useRef<StrikePoint[]>([])
+  const divertorVisRef = useRef<DivertorVisuals | null>(null)
   const peakIpRef = useRef(0)
   const peakStableFramesRef = useRef(0)
   const flatTopReachedRef = useRef(false)
@@ -266,7 +270,8 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       // Reset all glow state when device changes — prevents stale strike
       // positions from the old device bleeding into the new one.
       glowIntensityRef.current = 0
-      frozenStrikePointsRef.current = []
+      emaStrikePointsRef.current = []
+      divertorVisRef.current = null
       peakIpRef.current = 0
       peakStableFramesRef.current = 0
       flatTopReachedRef.current = false
@@ -278,7 +283,8 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       // Simulation was reset or preset switched — clear all plasma visuals.
       // This prevents frozen glow/plasma from lingering when e.g. switching DD→DT.
       glowIntensityRef.current = 0
-      frozenStrikePointsRef.current = []
+      emaStrikePointsRef.current = []
+      divertorVisRef.current?.reset()
       peakIpRef.current = 0
       peakStableFramesRef.current = 0
       flatTopReachedRef.current = false
@@ -287,7 +293,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       // Clear glow sprites and wall illumination
       if (state.glowGroup) {
         state.glowGroup.update({
-          strikePoints: [], intensity: 0, powerScale: 0,
+          strikePoints: [], intensity: 0,
           axisR: 0, time: 0,
         })
       }
@@ -301,16 +307,29 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
 
     getPortConfig(deviceId, deviceR0, deviceA)
     const opacityScale = DEVICE_OPACITY_SCALE[deviceId ?? ''] ?? DEFAULT_OPACITY_SCALE
-    const basePowerScale = DEVICE_POWER_SCALE[deviceId ?? ''] ?? DEFAULT_POWER_SCALE
-    // DD plasmas produce much less divertor heat flux — halve the glow
-    const isDT = (snapshot.mass_number ?? 2.0) > 2.0
-    const powerScale = isDT ? basePowerScale : basePowerScale * 0.5
     const glowTuning = DEVICE_GLOW_TUNING[deviceId ?? ''] ?? DEFAULT_GLOW_TUNING
 
-    // Set per-device strike illumination color on wall material
+    // Physics-driven divertor state: q_peak → brightness, λ_q → band width,
+    // thermal model → tile incandescence. Keyed to the snapshot's device id
+    // (authoritative, and reflects DD/DT fuel via mass_number).
+    if (!divertorVisRef.current) {
+      divertorVisRef.current = new DivertorVisuals(snapshot.device_id)
+    }
+    const divVis = divertorVisRef.current.update(snapshot)
+
+    // Glow tint: device recycling-light color shifting toward blackbody
+    // incandescence as the target tiles heat up.
+    const incand = divVis.incandescence
+    const glowColor = {
+      r: glowTuning.color.r + (divVis.blackbody.r - glowTuning.color.r) * incand * 0.7,
+      g: glowTuning.color.g + (divVis.blackbody.g - glowTuning.color.g) * incand * 0.7,
+      b: glowTuning.color.b + (divVis.blackbody.b - glowTuning.color.b) * incand * 0.7,
+    }
+
+    // Set strike illumination color on wall material (warm-shifted for tiles)
     if (state.wallMaterial) {
-      const sc = glowTuning.color
-      state.wallMaterial.uniforms.u_strikeColor.value.set(sc.r, sc.g * 0.5, sc.b)
+      state.wallMaterial.uniforms.u_strikeColor.value.set(
+        glowColor.r, glowColor.g * 0.6, glowColor.b)
     }
 
     // Parse limiter points for strike detection
@@ -409,39 +428,41 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
 
       const hasSOLPower = snapshot.p_loss > 1.0 && snapshot.ip > 0.5
       const glowActive = isDiverted && flatTopReachedRef.current && (snapshot.in_hmode || hasSOLPower)
-      const targetGlow = glowActive ? 0.8 : 0
-      const glowLerpRate = glowActive ? 0.04 : 0.25
+      // Physics-driven brightness: log-mapped q_peak (ELMs spike it,
+      // detachment dims it, ramp-down fades it) × per-device art scale.
+      const targetGlow = glowActive ? divVis.intensity : 0
+      const glowLerpRate = glowActive ? 0.08 : 0.25
       glowIntensityRef.current += (targetGlow - glowIntensityRef.current) * glowLerpRate
       if (glowIntensityRef.current < 0.005) glowIntensityRef.current = 0
       const glowIntensity = glowIntensityRef.current
 
-      // Use frozen positions once glow is active — prevents any residual motion
-      let strikePoints: StrikePoint[]
-      if (glowActive) {
-        if (frozenStrikePointsRef.current.length === 0) {
-          // First frame of glow — freeze the current positions permanently
-          frozenStrikePointsRef.current = candidateStrikes
-        }
-        strikePoints = frozenStrikePointsRef.current
-      } else if (glowIntensity > 0.01) {
-        strikePoints = frozenStrikePointsRef.current
+      // EMA-smoothed strike positions — kills frame-to-frame jitter but keeps
+      // tracking slow drift (strike sweeps, ramp-down), unlike the previous
+      // freeze-on-activation approach.
+      const ema = emaStrikePointsRef.current
+      if (candidateStrikes.length !== ema.length) {
+        emaStrikePointsRef.current = candidateStrikes.map(sp => ({ ...sp }))
       } else {
-        strikePoints = []
-        frozenStrikePointsRef.current = []
+        const alpha = 0.12
+        for (let i = 0; i < ema.length; i++) {
+          ema[i].r += (candidateStrikes[i].r - ema[i].r) * alpha
+          ema[i].z += (candidateStrikes[i].z - ema[i].z) * alpha
+        }
       }
+      const strikePoints: StrikePoint[] =
+        glowIntensity > 0.005 ? emaStrikePointsRef.current : []
 
       state.glowGroup.update({
         strikePoints,
         intensity: glowIntensity,
-        powerScale,
+        bandWidth: divVis.bandWidth,
+        color: glowColor,
         axisR: snapshot.axis_r,
         time: state.clock.getElapsedTime(),
       })
 
-      // Update wall illumination from strike points
-      // Scale wall illumination proportionally with glow intensity
-      const wallGlowFactor = glowIntensity / 0.8
-      if (state.wallMaterial && strikePoints.length > 0 && wallGlowFactor > 0.01) {
+      // Update wall illumination from strike points, proportional to glow
+      if (state.wallMaterial && strikePoints.length > 0 && glowIntensity > 0.01) {
         const spUniforms: { x: number; y: number; z: number; intensity: number }[] = []
         const phis = [-1.2, -0.6, 0, 0.6, 1.2]
         for (const sp of strikePoints) {
@@ -449,7 +470,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
             if (spUniforms.length >= 8) break
             const v = toroidal(sp.r, sp.z, phi)
             const fadeFactor = Math.exp(-Math.abs(phi) * 0.5)
-            spUniforms.push({ x: v.x, y: v.y, z: v.z, intensity: powerScale * 0.7 * fadeFactor * wallGlowFactor })
+            spUniforms.push({ x: v.x, y: v.y, z: v.z, intensity: glowIntensity * 0.9 * fadeFactor })
           }
         }
         updateStrikePoints(state.wallMaterial, spUniforms)
@@ -468,10 +489,10 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       disruptionFlashRef.current = 1.0
       // Immediately clear plasma and glow
       glowIntensityRef.current = 0
-      frozenStrikePointsRef.current = []
+      emaStrikePointsRef.current = []
       if (state.glowGroup) {
         state.glowGroup.update({
-          strikePoints: [], intensity: 0, powerScale: 0,
+          strikePoints: [], intensity: 0,
           axisR: snapshot.axis_r, time: 0,
         })
       }
