@@ -131,7 +131,6 @@ export function buildWallGeometry(
   const normals = new Float32Array(nVerts * 3)
   const uvs = new Float32Array(nVerts * 2)
   const regions = new Float32Array(nVerts)
-  const tileHashes = new Float32Array(nVerts)
   const indices = new Uint32Array(nIndices)
 
   for (let q = 0; q < nQuads; q++) {
@@ -186,14 +185,8 @@ export function buildWallGeometry(
     uvs[base * 2 + 4] = polU1; uvs[base * 2 + 5] = torV1
     uvs[base * 2 + 6] = polU0; uvs[base * 2 + 7] = torV1
 
-    // Per-tile hash for brightness variation
-    const cellP = Math.floor(polU0 * totalArc / getGridSpacing(quad.region, cfg).poloidal)
-    const cellT = Math.floor(torV0 * nSlices)
-    const hash = ((cellP * 7919 + cellT * 104729) & 0xFFFF) / 65536
-
     for (let i = 0; i < 4; i++) {
       regions[base + i] = quad.region
-      tileHashes[base + i] = hash
     }
 
     // Indices: two triangles per quad
@@ -211,17 +204,9 @@ export function buildWallGeometry(
   geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
   geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
   geometry.setAttribute('a_region', new THREE.BufferAttribute(regions, 1))
-  geometry.setAttribute('a_tileHash', new THREE.BufferAttribute(tileHashes, 1))
   geometry.setIndex(new THREE.BufferAttribute(indices, 1))
 
   return { geometry, regions }
-}
-
-function getGridSpacing(region: WallRegion, cfg: PortConfig): { poloidal: number; toroidal: number } {
-  if (region === WallRegion.Inboard && cfg.tileRegions) return cfg.tileRegions.inboardGridSpacing
-  if (region === WallRegion.Limiter && cfg.tileRegions) return cfg.tileRegions.limiterGridSpacing
-  if (region === WallRegion.Divertor && cfg.divertorRegion) return cfg.divertorRegion.gridSpacing
-  return cfg.tileGridSpacing
 }
 
 /**

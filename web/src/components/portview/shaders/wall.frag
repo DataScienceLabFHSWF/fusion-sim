@@ -38,7 +38,6 @@ varying vec3 v_normal;
 varying vec3 v_viewDir;
 varying vec3 v_worldPos;
 varying float v_region;
-varying float v_tileHash;
 varying float v_depth;
 
 float gridProximity(vec2 pos, vec2 spacing) {
@@ -49,8 +48,77 @@ float gridProximity(vec2 pos, vec2 spacing) {
   return smoothstep(0.0, u_borderWidth, minDist);
 }
 
+// ── Procedural tile relief ──────────────────────────────────────────
+// A height field over the (poloidal, toroidal) wall parametrization gives
+// each tile a beveled edge, a slight random tilt, fastener holes, and fine
+// graphite grain. The gradient of this field perturbs the normal so tiles
+// catch the strike-point light individually instead of reading as a flat
+// painted grid.
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Height (metres) of the wall detail at a point in (poloidal-arc, toroidal-arc)
+// space. isBands=1 switches to horizontal-band seams only (JET inboard style).
+float tileHeight(vec2 pos, vec2 spacing, float isBands) {
+  vec2 cell = pos / spacing;
+  vec2 id = floor(cell);
+  vec2 f = fract(cell);
+  vec2 dEdge = min(f, 1.0 - f) * spacing;
+  float minDist = isBands > 0.5 ? dEdge.x : min(dEdge.x, dEdge.y);
+
+  // Beveled seam: flat tile surface dropping into the gap over a narrow
+  // chamfer (~12 mm) — much narrower than the visual seam darkening width,
+  // so tiles stay flat with crisp edges instead of reading pillowed.
+  float h = smoothstep(0.0, 0.012, minDist) * 0.0035;
+
+  // Slight random tilt per tile — real tile rows catch light unevenly
+  float rx = hash21(id + 7.3) - 0.5;
+  float ry = hash21(id + 3.1) - 0.5;
+  h += ((f.x - 0.5) * rx + (f.y - 0.5) * ry) * 0.0015 * (1.0 - isBands);
+
+  // Fastener hole dimples (two per tile), only on reasonably large tiles
+  if (isBands < 0.5 && spacing.x > 0.06) {
+    vec2 local = (f - 0.5) * spacing;  // metres from tile centre
+    float holeOffset = 0.25 * spacing.y;
+    float d1 = length(local - vec2(0.0, holeOffset));
+    float d2 = length(local + vec2(0.0, holeOffset));
+    float dh = min(d1, d2);
+    h -= (1.0 - smoothstep(0.004, 0.009, dh)) * 0.004;
+  }
+
+  // Fine graphite grain
+  h += (vnoise(pos * 40.0) - 0.5) * 0.0003;
+  return h;
+}
+
+// Mask (0..1) of the fastener holes, for albedo darkening.
+float tileHoleMask(vec2 pos, vec2 spacing, float isBands) {
+  if (isBands > 0.5 || spacing.x <= 0.06) return 0.0;
+  vec2 f = fract(pos / spacing);
+  vec2 local = (f - 0.5) * spacing;
+  float holeOffset = 0.25 * spacing.y;
+  float d1 = length(local - vec2(0.0, holeOffset));
+  float d2 = length(local + vec2(0.0, holeOffset));
+  return 1.0 - smoothstep(0.003, 0.008, min(d1, d2));
+}
+
 void main() {
-  vec3 N = normalize(v_normal);
+  vec3 Ngeom = normalize(v_normal);
   vec3 V = normalize(v_viewDir);
 
   // Region-based grid spacing
@@ -73,18 +141,38 @@ void main() {
   // Poloidal/toroidal position in metres
   vec2 worldUV = vec2(v_uv.x * u_totalArc, v_uv.y * u_nSlices * spacing.y);
 
+  // JET-style horizontal bands on the inboard column?
+  float isBands = (region == 1 && u_inboardStyle > 0.5) ? 1.0 : 0.0;
+  vec2 reliefSpacing = isBands > 0.5 ? vec2(u_bandWidth, 1000.0) : spacing;
+
   // Grid proximity (0 at grid line, 1 between lines)
   float gp;
-  if (region == 1 && u_inboardStyle > 0.5) {
-    // JET-style horizontal bands
-    float bandPos = v_uv.x * u_totalArc;
-    float bandCell = bandPos / u_bandWidth;
+  if (isBands > 0.5) {
+    float bandCell = worldUV.x / u_bandWidth;
     float bandF = fract(bandCell);
     float bandDist = min(bandF, 1.0 - bandF) * u_bandWidth;
     gp = smoothstep(0.0, u_borderWidth, bandDist);
   } else {
-    gp = gridProximity(vec2(v_uv.x * u_totalArc, v_uv.y * u_nSlices * spacing.y), spacing);
+    gp = gridProximity(worldUV, spacing);
   }
+
+  // ── Tile relief: perturb the normal with the height-field gradient ──
+  float h0 = tileHeight(worldUV, reliefSpacing, isBands);
+  const float RELIEF_EPS = 0.004;  // 4 mm gradient sample distance
+  float hx = tileHeight(worldUV + vec2(RELIEF_EPS, 0.0), reliefSpacing, isBands);
+  float hy = tileHeight(worldUV + vec2(0.0, RELIEF_EPS), reliefSpacing, isBands);
+  vec2 hGrad = vec2(hx - h0, hy - h0) / RELIEF_EPS;
+  // Tangent frame on the torus: toroidal direction is horizontal around the
+  // machine axis; poloidal direction completes the frame with the normal.
+  vec3 Ttor = normalize(vec3(-v_worldPos.y, v_worldPos.x, 0.0));
+  vec3 Tpol = normalize(cross(Ngeom, Ttor));
+  // Fade the relief with distance — the 4 mm gradient samples alias into
+  // moiré on far walls, and distant tiles should read flat anyway.
+  float reliefFade = clamp(1.0 - v_depth / u_maxDepth * 0.85, 0.15, 1.0);
+  vec3 N = normalize(Ngeom - 1.8 * reliefFade * (Tpol * hGrad.x + Ttor * hGrad.y));
+
+  float holeMask = tileHoleMask(worldUV, reliefSpacing, isBands);
+  float tileRand = hash21(floor(worldUV / reliefSpacing) + 0.5);
 
   // ── Vertical (toroidal) banding — JET-style octant panels ──
   // Wide vertical bands with alternating brightness and subtle relief lines
@@ -103,8 +191,11 @@ void main() {
     bandMod *= groove;
   }
 
-  // Per-tile brightness variation
-  float tileVar = 0.92 + v_tileHash * 0.16; // range 0.92 — 1.08
+  // Per-tile brightness variation (per-fragment hash of the actual grid cell)
+  float tileVar = 0.90 + tileRand * 0.20; // range 0.90 — 1.10
+
+  // Fine graphite grain modulation on the albedo
+  float grain = 0.94 + vnoise(worldUV * 23.0) * 0.12;
 
   // Depth-based ambient (darker tiles further from camera)
   // Much darker interior — divertor glow should be the primary light source
@@ -116,9 +207,31 @@ void main() {
   float NdotV = abs(dot(N, V));
   float fresnel = pow(1.0 - NdotV, 4.0) * u_fresnelStrength * 0.4;
 
+  // Pre-pass: accumulated strike heat at this fragment, for thermal
+  // discoloration of the tiles around the strike zones (iridescent
+  // oxidation rings, cf. JET inboard tiles).
+  float heat = 0.0;
+  for (int i = 0; i < 8; i++) {
+    if (i >= u_nStrikePoints) break;
+    float dist = length(v_worldPos - u_strikePoints[i].xyz);
+    heat += u_strikePoints[i].w / (1.0 + dist * dist * 12.0);
+  }
+
   // Combine tile color
   vec3 color = baseColor / 255.0;
-  color *= tileVar * depthMod * bandMod;
+  color *= tileVar * grain * depthMod * bandMod;
+
+  // Fastener holes: dark recesses
+  color *= 1.0 - holeMask * 0.55;
+
+  // Thermal discoloration: straw → blue-purple rings where strike heat lands
+  float ir = clamp(heat * 1.4, 0.0, 1.0);
+  vec3 irTint = mix(vec3(1.0),
+                    mix(vec3(1.06, 0.98, 0.82),
+                        vec3(0.84, 0.88, 1.08),
+                        smoothstep(0.35, 0.9, ir)),
+                    smoothstep(0.05, 0.4, ir) * 0.6);
+  color *= irTint;
 
   // Grid line darkening
   color *= mix(1.0 - u_tileGridDarken, 1.0, gp);
@@ -126,14 +239,24 @@ void main() {
   // Fresnel highlight
   color += vec3(fresnel);
 
-  // Strike point wall illumination
+  // Strike point wall illumination — Lambert term against the relief normal
+  // so tile bevels, tilts, and bolt holes catch the divertor light, plus a
+  // tight graphite sheen.
   for (int i = 0; i < 8; i++) {
     if (i >= u_nStrikePoints) break;
     vec3 sp = u_strikePoints[i].xyz;
     float intensity = u_strikePoints[i].w;
-    float dist = length(v_worldPos - sp);
+    vec3 L = sp - v_worldPos;
+    float dist = length(L);
+    L /= max(dist, 1e-4);
     float falloff = intensity / (1.0 + dist * dist * 12.0);
-    color += u_strikeColor * falloff * 0.35;
+    float ndl = clamp(dot(N, L), 0.0, 1.0);
+    float shade = 0.25 + 0.75 * ndl;   // soft wrap — recycling light scatters
+    color += u_strikeColor * falloff * 0.45 * shade;
+    // Graphite sheen: tight specular lobe from the glowing strike line
+    vec3 H = normalize(L + V);
+    float spec = pow(clamp(dot(N, H), 0.0, 1.0), 24.0);
+    color += u_strikeColor * spec * falloff * 0.35;
   }
 
   // ── Extra port openings ──
