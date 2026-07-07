@@ -2,7 +2,6 @@ import * as THREE from 'three'
 import type { Contour } from '../../lib/types'
 import type { PortConfig } from './types'
 import { truncateAtWall, subsample, splitChains, densifyContour } from './types'
-import { createElmFilamentGroup } from './elmFilaments'
 
 // ── Separatrix: mesh-based volumetric rendering ──
 // The separatrix is rendered as multiple thin toroidal mesh shells with
@@ -46,14 +45,22 @@ const SEP_BASE_INTENSITY = 0.10
 // ── ELM event parameters ──
 // An ELM is an *event*, not a state: the elm_active rising edge triggers an
 // envelope (fast attack, exponential decay) localized to the outboard
-// midplane where ballooning modes erupt, plus a burst of field-aligned
-// filaments (see elmFilaments.ts). Timescales are stretched ~100× from the
-// real sub-millisecond crash so the eruption is visible.
-const ELM_FLASH_GAIN = 4.0     // peak extra brightness (× base) at weight 1
-const ELM_WHITE_SHIFT = 0.3    // color shift toward white at the peak
+// midplane where ballooning modes erupt. The envelope drives two things on
+// the existing translucent separatrix shells: a broad pedestal-emission
+// brightening (the "thicker glowing edge") and a *continuous* helical stripe
+// pattern painted per-vertex (field-aligned "barbershop-pole" filaments,
+// pitch set by q95). No discrete sprites — continuous by construction.
+// Timescales are stretched ~100× from the real sub-millisecond crash.
+const ELM_PED_GAIN = 2.2       // broad pedestal-shell brightening at weight 1
+const ELM_FIL_GAIN = 6.0       // extra brightness inside the helical filaments
+const ELM_WHITE_SHIFT = 0.35   // color shift toward white (strongest in filaments)
 const ELM_ATTACK = 0.05        // seconds to peak
-const ELM_DECAY_TAU = 0.12     // brightness e-folding after the peak
+const ELM_DECAY_TAU = 0.13     // brightness e-folding after the peak
 const ELM_MAX_AGE = 0.7        // envelope considered over after this
+const ELM_STRIPE_COUNT = 11    // filaments around the poloidal cross-section
+                               // (integer → continuous across the inboard seam)
+const ELM_STRIPE_SPEED = 2.2   // rad/s — slow rotation/drift of the pattern
+const ELM_FIL_WHITE = 0.65     // filament share of the white shift
 
 /** GLSL-style smoothstep: Hermite interpolation clamped to [0,1]. */
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -333,6 +340,8 @@ function rebuildSepGeometry(
   positions: Float32Array,
   baseBright: Float32Array,
   elmWeight: Float32Array,
+  vertPhi: Float32Array,
+  vertPolAngle: Float32Array,
   indices: Uint32Array,
   xpR = 0, xpZ = 0, xpUR = 0, xpUZ = 0, axisR = 0, axisZ = 0,
   inHmode = false,
@@ -463,6 +472,12 @@ function rebuildSepGeometry(
         const outb = Math.max(0, Math.min(1, (R - axisR) / Math.max(rMax - axisR, 0.2)))
         const zg = Math.exp(-((Z - axisZ) * (Z - axisZ)) / 0.72)  // σ ≈ 0.6 m
         elmWeight[vi] = 0.25 + 0.75 * outb * zg
+
+        // Toroidal + poloidal parametrization for the ELM helical stripes.
+        // Poloidal angle is measured around the magnetic axis; with an integer
+        // stripe count it stays continuous across the inboard branch cut.
+        vertPhi[vi] = phi
+        vertPolAngle[vi] = Math.atan2(Z - axisZ, R - axisR)
 
         vi++
       }
@@ -752,7 +767,6 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     side: THREE.DoubleSide,
   })
 
-  const baseColor = { r: 0.85, g: 0.20, b: 0.55 }   // fuchsia — ionized deuterium
   const legColor = { r: 0.90, g: 0.30, b: 0.60 }
 
   // Camera position (constant for a given device config)
@@ -767,6 +781,8 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   const sepColors = new Float32Array(SEP_MAX_VERTS * 3)
   const sepBaseBright = new Float32Array(SEP_MAX_VERTS)
   const sepElmWeight = new Float32Array(SEP_MAX_VERTS)
+  const sepVertPhi = new Float32Array(SEP_MAX_VERTS)
+  const sepVertPolAngle = new Float32Array(SEP_MAX_VERTS)
   const sepIdxBuf = new Uint32Array(SEP_MAX_INDICES)
 
   const sepGeom = new THREE.BufferGeometry()
@@ -815,14 +831,12 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
 
   let legVertCount = 0
   let legIdxCount = 0
-  let legFP = ''
 
-  // ═══ ELM FILAMENTS + EVENT ENVELOPE ═══
-  const filaments = createElmFilamentGroup()
-  group.add(filaments.group)
+  // ═══ ELM EVENT ENVELOPE ═══
   let elmPrevActive = false
   let elmT0 = -Infinity   // scene-clock time of the last ELM crash
   let elmAmp = 0          // per-event amplitude from elm_energy_loss
+  let lastParams: PlasmaUpdateParams | null = null
 
   /** Event envelope: fast attack, exponential decay. */
   const elmEnvelope = (time: number): number => {
@@ -833,33 +847,98 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       : Math.exp(-(dt - ELM_ATTACK) / ELM_DECAY_TAU)
   }
 
-  // ═══ UPDATE (hot path — called every frame) ═══
+  // ═══ COLOR APPLICATION ═══
+  // Per-vertex color write for the separatrix shells and divertor legs.
+  // Split out from update() so it can also run every frame from tick()
+  // while an ELM envelope is alive, animating the barbershop stripes at
+  // display rate.  Cheap (a multiply, plus one cos during ELMs) per vertex.
+  const applyColors = (time: number) => {
+    const p = lastParams
+    if (!p || sepVertCount === 0) { sepMesh.visible = false; legMesh.visible = false; return }
+
+    // Plasma color from temperature — fuchsia (ionized deuterium) base
+    const tempFrac = Math.min(p.te0 / 12, 1)
+    let cr = 0.75 + tempFrac * 0.15
+    let cg = 0.15 + tempFrac * 0.10
+    let cb = 0.45 + tempFrac * 0.15
+    // Impurity tints: carbon pulls faintly blue-green; neon seeding pulls
+    // the edge glow orange-red (its strongest visible lines are red).
+    const imp = Math.min(Math.max(p.impurityFraction, 0) * 20, 1)
+    const neon = Math.min(Math.max(p.neonPuff, 0) / 2, 1)
+    cr += neon * 0.08 - imp * 0.04
+    cg += imp * 0.06
+    cb -= neon * 0.12 - imp * 0.02
+    // Edge emission scales with density (recycling light) and radiated
+    // power fraction (a radiative edge is a brighter edge).
+    const fGW = Math.min(Math.max(p.fGreenwald, 0), 1.2)
+    const emission = (0.6 + 0.55 * fGW) * (1 + Math.min(Math.max(p.pRadFrac, 0), 1) * 0.4)
+    const scale = p.opacity * emission
+    const elmEnv = elmEnvelope(time) * elmAmp
+
+    // ── Separatrix shells ──
+    if (elmEnv > 0.001) {
+      // Field-aligned helical stripes: bright filaments at constant
+      // (N·θ − N/q·φ), winding tighter at low q95, slowly rotating. The
+      // broad pedestal term brightens the whole edge; the stripe term adds
+      // the barbershop filaments on top, localized to the outboard midplane.
+      const pitch = Math.min(Math.max(Math.abs(p.q95), 2), 8)
+      const kPhi = ELM_STRIPE_COUNT / pitch
+      const drift = time * ELM_STRIPE_SPEED
+      for (let i = 0; i < sepVertCount; i++) {
+        const w = sepElmWeight[i] * elmEnv
+        const phase = ELM_STRIPE_COUNT * sepVertPolAngle[i] - kPhi * sepVertPhi[i] - drift
+        let s = Math.cos(phase)
+        s = s > 0 ? s * s * s : 0   // sharpen to narrow bright filaments
+        const b = sepBaseBright[i] * scale * (1 + ELM_PED_GAIN * w + ELM_FIL_GAIN * s * w)
+        const shift = ELM_WHITE_SHIFT * w * ((1 - ELM_FIL_WHITE) + ELM_FIL_WHITE * s)
+        sepColors[i * 3] = (cr + shift) * b
+        sepColors[i * 3 + 1] = (cg + shift) * b
+        sepColors[i * 3 + 2] = (cb + shift) * b
+      }
+    } else {
+      for (let i = 0; i < sepVertCount; i++) {
+        const b = sepBaseBright[i] * scale
+        sepColors[i * 3] = cr * b
+        sepColors[i * 3 + 1] = cg * b
+        sepColors[i * 3 + 2] = cb * b
+      }
+    }
+    sepColAttr.needsUpdate = true
+    sepGeom.setDrawRange(0, sepIdxCount)
+    sepMesh.visible = true
+
+    // ── Divertor legs ──
+    // The particle burst arrives at the divertor: uniform brightening along
+    // the legs (no stripes), slightly weaker than the midplane flash.
+    if (legVertCount > 0) {
+      const legEnv = elmEnv * 0.7
+      const lr = legColor.r + ELM_WHITE_SHIFT * legEnv
+      const lg = legColor.g + ELM_WHITE_SHIFT * legEnv
+      const lb = legColor.b + ELM_WHITE_SHIFT * legEnv
+      const lScale = scale * (1 + ELM_PED_GAIN * legEnv)
+      for (let i = 0; i < legVertCount; i++) {
+        const b = legBaseBright[i] * lScale
+        legColors[i * 3] = lr * b
+        legColors[i * 3 + 1] = lg * b
+        legColors[i * 3 + 2] = lb * b
+      }
+      legColAttr.needsUpdate = true
+      legGeom.setDrawRange(0, legIdxCount)
+      legMesh.visible = true
+    } else {
+      legMesh.visible = false
+    }
+  }
+
+  // ═══ UPDATE (called on each sim snapshot) ═══
   const update = (params: PlasmaUpdateParams) => {
     const sepPts = params.separatrix.points
     if (sepPts.length < 4) {
       sepMesh.visible = false
       legMesh.visible = false
+      lastParams = null
       return
     }
-
-    // Plasma color from temperature — fuchsia (ionized deuterium) base
-    const tempFrac = Math.min(params.te0 / 12, 1)
-    baseColor.r = 0.75 + tempFrac * 0.15   // 0.75 → 0.90
-    baseColor.g = 0.15 + tempFrac * 0.10   // 0.15 → 0.25
-    baseColor.b = 0.45 + tempFrac * 0.15   // 0.45 → 0.60
-
-    // Impurity tints: carbon pulls faintly blue-green; neon seeding pulls
-    // the edge glow orange-red (its strongest visible lines are red).
-    const imp = Math.min(Math.max(params.impurityFraction, 0) * 20, 1)
-    const neon = Math.min(Math.max(params.neonPuff, 0) / 2, 1)
-    baseColor.r += neon * 0.08 - imp * 0.04
-    baseColor.g += imp * 0.06
-    baseColor.b -= neon * 0.12 - imp * 0.02
-
-    // Edge emission scales with density (recycling light) and radiated
-    // power fraction (a radiative edge is a brighter edge).
-    const fGW = Math.min(Math.max(params.fGreenwald, 0), 1.2)
-    const emission = (0.6 + 0.55 * fGW) * (1 + Math.min(Math.max(params.pRadFrac, 0), 1) * 0.4)
 
     // ── ELM event: trigger on the rising edge of elm_active ──
     if (params.elmActive && !elmPrevActive) {
@@ -868,15 +947,11 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       // (~30 kJ) ≈ 1.0, JET/ITER-size crashes saturate at 1.6.
       const loss = Math.max(params.elmEnergyLoss ?? 0, 0)
       elmAmp = Math.min(0.6 + Math.sqrt(loss) * 2.5, 1.6)
-      filaments.spawn(params.time, params.q95, elmAmp)
     }
     elmPrevActive = params.elmActive
-    const elmEnv = elmEnvelope(params.time) * elmAmp
-    filaments.update(params.time)
+    lastParams = params
 
-    const opacity = params.opacity * emission
-
-    // ── Separatrix ──
+    // ── Separatrix geometry (rebuilt only when the contour changes) ──
     const newFP = contourFingerprint(
       sepPts, params.inHmode,
       params.xpointR, params.xpointZ,
@@ -884,10 +959,9 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     )
 
     if (newFP !== sepFP) {
-      // FULL REBUILD: contour geometry changed
       const result = rebuildSepGeometry(
         cfg, sepPts, camPos,
-        sepPositions, sepBaseBright, sepElmWeight, sepIdxBuf,
+        sepPositions, sepBaseBright, sepElmWeight, sepVertPhi, sepVertPolAngle, sepIdxBuf,
         params.xpointR, params.xpointZ, params.xpointUpperR, params.xpointUpperZ,
         params.axisR, params.axisZ, params.inHmode,
       )
@@ -896,90 +970,28 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       sepFP = newFP
       sepPosAttr.needsUpdate = true
       sepIdxAttr.needsUpdate = true
-      // Hand the processed boundary to the filament system so ELM ropes are
-      // born on the current equilibrium shape.
-      if (result.contour.length > 0) {
-        filaments.setBoundary(result.contour, result.normals, params.axisR, params.axisZ)
-      }
-    }
 
-    // COLOR UPDATE (every frame — cheap per-vertex multiply)
-    if (sepVertCount > 0) {
-      const cr = baseColor.r
-      const cg = baseColor.g
-      const cb = baseColor.b
-      const scale = opacity
-
-      if (elmEnv > 0.001) {
-        // ELM flash: brightness boost + white shift, localized to the
-        // outboard midplane by the per-vertex weight.
-        for (let i = 0; i < sepVertCount; i++) {
-          const w = sepElmWeight[i] * elmEnv
-          const b = sepBaseBright[i] * scale * (1 + ELM_FLASH_GAIN * w)
-          const shift = ELM_WHITE_SHIFT * w
-          sepColors[i * 3] = (cr + shift) * b
-          sepColors[i * 3 + 1] = (cg + shift) * b
-          sepColors[i * 3 + 2] = (cb + shift) * b
-        }
-      } else {
-        for (let i = 0; i < sepVertCount; i++) {
-          const b = sepBaseBright[i] * scale
-          sepColors[i * 3] = cr * b
-          sepColors[i * 3 + 1] = cg * b
-          sepColors[i * 3 + 2] = cb * b
-        }
-      }
-      sepColAttr.needsUpdate = true
-      sepGeom.setDrawRange(0, sepIdxCount)
-      sepMesh.visible = true
-    } else {
-      sepMesh.visible = false
-    }
-
-    // ── Divertor legs ──
-    // Show legs whenever separatrix is visible (not gated on H-mode)
-    // to prevent legs flashing independently during beta_N oscillations.
-    if (sepVertCount > 0) {
       // Legs share the same fingerprint (if contour changed, legs change too)
-      if (newFP !== legFP) {
-        const result = rebuildLegGeometry(
-          cfg, params, camPos,
-          legPositions, legBaseBright, legIdxBuf,
-        )
-        legVertCount = result.vertCount
-        legIdxCount = result.idxCount
-        legFP = newFP
-        legPosAttr.needsUpdate = true
-        legIdxAttr.needsUpdate = true
-      }
-
-      if (legVertCount > 0) {
-        // ELM flash on the legs: the particle burst arrives at the divertor —
-        // uniform along the legs, slightly weaker than the midplane flash.
-        const legEnv = elmEnv * 0.7
-        const lr = (legColor.r + ELM_WHITE_SHIFT * legEnv)
-        const lg = (legColor.g + ELM_WHITE_SHIFT * legEnv)
-        const lb = (legColor.b + ELM_WHITE_SHIFT * legEnv)
-        const lScale = opacity * (1 + ELM_FLASH_GAIN * legEnv)
-        for (let i = 0; i < legVertCount; i++) {
-          const b = legBaseBright[i] * lScale
-          legColors[i * 3] = lr * b
-          legColors[i * 3 + 1] = lg * b
-          legColors[i * 3 + 2] = lb * b
-        }
-        legColAttr.needsUpdate = true
-        legGeom.setDrawRange(0, legIdxCount)
-        legMesh.visible = true
-      } else {
-        legMesh.visible = false
-      }
-    } else {
-      legMesh.visible = false
+      const legResult = rebuildLegGeometry(
+        cfg, params, camPos,
+        legPositions, legBaseBright, legIdxBuf,
+      )
+      legVertCount = legResult.vertCount
+      legIdxCount = legResult.idxCount
+      legPosAttr.needsUpdate = true
+      legIdxAttr.needsUpdate = true
     }
+
+    applyColors(params.time)
   }
 
+  // ═══ TICK (display-rate animation between sim snapshots) ═══
   const tick = (time: number) => {
-    filaments.update(time)
+    // Re-run the per-vertex color write only while an ELM envelope is alive,
+    // so the barbershop stripes rotate smoothly; the plasma is otherwise
+    // static between sim ticks and needs no per-frame work.
+    if (!lastParams) return
+    if (time - elmT0 <= ELM_MAX_AGE) applyColors(time)
   }
 
   return { group, sepMaterial, legMaterial, update, tick }

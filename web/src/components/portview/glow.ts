@@ -134,11 +134,6 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
   const basePhi = new Float32Array(MAX_GLOW_POINTS)
   // Cached phi fade factor — only changes when strike points change
   const cachedFade = new Float32Array(MAX_GLOW_POINTS)
-  // Per-sprite unit spread across the strike band (gaussian-ish, deterministic).
-  // Scaled by the physical band width (λ_q × flux expansion) every frame, so
-  // the band visibly narrows/widens as the SOL width evolves.
-  const spreadR = new Float32Array(MAX_GLOW_POINTS)
-  const spreadZ = new Float32Array(MAX_GLOW_POINTS)
 
   // Single persistent geometry + Points (never disposed/recreated)
   const geometry = new THREE.BufferGeometry()
@@ -189,10 +184,6 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
           basePosZ[vi] = sp.z
           basePhi[vi] = phi
           cachedFade[vi] = Math.exp(-Math.abs(phi) * STRIKE_FADE_RATE)
-          // Gaussian-ish unit offsets (sum of two uniforms, centered) so most
-          // sprites cluster at the strike line with soft wings across the band
-          spreadR[vi] = (pseudoRandom(vi * 17.3) + pseudoRandom(vi * 31.7) - 1.0)
-          spreadZ[vi] = (pseudoRandom(vi * 53.9) + pseudoRandom(vi * 71.3) - 1.0)
           vi++
         }
       }
@@ -202,9 +193,15 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
 
     // ═══ PER-FRAME UPDATE: position jitter + stochastic brightness ═══
     const jitAmp = t.jitterAmplitude
-    const bandW = params.bandWidth ?? 0
     const col = params.color ?? t.color
     const glowR = col.r, glowG = col.g, glowB = col.b
+
+    // Express the SOL band width (λ_q × flux expansion) through the sprite
+    // SIZE rather than scattering positions — keeps the 600 sprites on a
+    // continuous overlapping ring (a solid glowing band) instead of breaking
+    // them into discrete orbs. Nominal band ≈ 3 cm → device point size.
+    const bandW = params.bandWidth ?? 0
+    material.size = t.pointSize * Math.min(Math.max(bandW / 0.03, 0.7), 1.9)
     // Offset strike point sprites inward from the wall surface so they're
     // visible through the open toroidal sector.  Without this, sprites sit
     // exactly on the wall mesh and are occluded by z-fighting / depth test.
@@ -227,8 +224,8 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
       const zOff = zSign * INWARD_OFFSET * 0.7
 
       const v = toroidal(
-        baseR + spreadR[vi] * bandW + jitR + rOff,
-        baseZ + spreadZ[vi] * bandW + jitZ + zOff,
+        baseR + jitR + rOff,
+        baseZ + jitZ + zOff,
         basePhi[vi],
       )
       posBuffer[vi * 3] = v.x
