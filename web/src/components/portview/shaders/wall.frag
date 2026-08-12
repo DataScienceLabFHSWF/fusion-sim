@@ -10,6 +10,7 @@ uniform vec2 u_limiterGridSpacing;
 uniform vec2 u_divertorGridSpacing;
 uniform float u_tileGridDarken;
 uniform float u_fresnelStrength;
+uniform float u_boltHoleScale;    // per-device tile fastener-hole size
 uniform float u_borderWidth;
 uniform float u_totalArc;         // total poloidal arc length in metres
 uniform float u_nSlices;          // number of toroidal slices
@@ -98,7 +99,7 @@ float tileHeight(vec2 pos, vec2 spacing, float isBands) {
     float d1 = length(local - vec2(0.0, holeOffset));
     float d2 = length(local + vec2(0.0, holeOffset));
     float dh = min(d1, d2);
-    h -= (1.0 - smoothstep(0.004, 0.009, dh)) * 0.004;
+    h -= (1.0 - smoothstep(0.004 * u_boltHoleScale, 0.009 * u_boltHoleScale, dh)) * 0.004;
   }
 
   // Fine graphite grain
@@ -114,7 +115,7 @@ float tileHoleMask(vec2 pos, vec2 spacing, float isBands) {
   float holeOffset = 0.25 * spacing.y;
   float d1 = length(local - vec2(0.0, holeOffset));
   float d2 = length(local + vec2(0.0, holeOffset));
-  return 1.0 - smoothstep(0.003, 0.008, min(d1, d2));
+  return 1.0 - smoothstep(0.003 * u_boltHoleScale, 0.008 * u_boltHoleScale, min(d1, d2));
 }
 
 void main() {

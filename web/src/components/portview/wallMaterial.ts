@@ -30,6 +30,7 @@ export function createWallMaterial(cfg: PortConfig, totalArc: number): THREE.Sha
       u_divertorGridSpacing: { value: new THREE.Vector2(divertorSpacing.poloidal, divertorSpacing.toroidal) },
       u_tileGridDarken: { value: cfg.tileGridDarken },
       u_fresnelStrength: { value: cfg.fresnelStrength ?? 0.3 },
+      u_boltHoleScale: { value: cfg.boltHoleScale ?? 1.0 },
       u_borderWidth: { value: 0.05 },
       u_totalArc: { value: totalArc },
       u_nSlices: { value: cfg.nWallSlices },

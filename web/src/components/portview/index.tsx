@@ -442,7 +442,11 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       // Physics-driven brightness: log-mapped q_peak (ELMs spike it,
       // detachment dims it, ramp-down fades it) × per-device art scale.
       const targetGlow = glowActive ? divVis.intensity : 0
-      const glowLerpRate = glowActive ? 0.08 : 0.25
+      // Asymmetric: slow rise so the glow fades in smoothly at flat-top onset
+      // without popping, but a quick fall so an ELM pulse drops back to the
+      // inter-ELM baseline promptly instead of lingering.
+      const rising = targetGlow > glowIntensityRef.current
+      const glowLerpRate = glowActive ? (rising ? 0.08 : 0.32) : 0.25
       glowIntensityRef.current += (targetGlow - glowIntensityRef.current) * glowLerpRate
       if (glowIntensityRef.current < 0.005) glowIntensityRef.current = 0
       const glowIntensity = glowIntensityRef.current

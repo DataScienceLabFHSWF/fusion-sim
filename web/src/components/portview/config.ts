@@ -97,6 +97,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
       { r: 2.35, zMin: -0.18, zMax: 0.18, phiMin: -0.92, phiMax: -0.80 },  // ECH launcher
     ],
     fresnelStrength: 0.30,
+    boltHoleScale: 0.55,
   },
   centaur: {
     portR: 2.73, portZ: 0, portRadius: 0.42, portLength: 0.22, portPhi: 0,
@@ -153,6 +154,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
       { r: 2.73, zMin: -0.35, zMax: 0.35, phiMin: -0.70, phiMax: -0.50 },
     ],
     fresnelStrength: 0.22,
+    boltHoleScale: 0.55,
     divertorRegion: {
       zThreshold: -1.2,
       tileColor: [20, 18, 16],
@@ -299,7 +301,7 @@ export const DEVICE_OPACITY_SCALE: Record<string, number> = {
   centaur: 0.06,
   iter: 0.012,
   sparc: 0.10,
-  jet: 0.020,
+  jet: 0.045,
 }
 export const DEFAULT_OPACITY_SCALE = 0.10
 

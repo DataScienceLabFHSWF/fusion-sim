@@ -108,12 +108,13 @@ export class DivertorVisuals {
       DEVICE_POWER_SCALE[this.deviceId] ?? DEFAULT_POWER_SCALE, 0.6)
     const raw = heatFluxToBrightness(div.q_peak) * artScale
 
-    // Fast attack (ELM spikes appear immediately), slow decay (afterglow of
-    // the transient reads over a few frames instead of a single-frame blink).
+    // Fast attack (ELM spikes appear immediately), quick decay back to the
+    // inter-ELM baseline — the transient should read as a sharp pulse, not
+    // linger. `raw` floors the decay, so the baseline glow itself is steady.
     if (raw >= this.smoothedIntensity) {
       this.smoothedIntensity += (raw - this.smoothedIntensity) * 0.6
     } else {
-      this.smoothedIntensity = Math.max(raw, this.smoothedIntensity * 0.88)
+      this.smoothedIntensity = Math.max(raw, this.smoothedIntensity * 0.62)
     }
 
     // ── Band width: λ_q mapped through a typical target flux expansion.
