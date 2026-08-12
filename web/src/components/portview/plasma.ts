@@ -54,14 +54,19 @@ const SEP_BASE_INTENSITY = 0.10
 const ELM_PED_GAIN = 2.2       // broad pedestal-shell brightening at weight 1
 const ELM_FIL_GAIN = 6.0       // extra brightness inside the helical filaments
 const ELM_WHITE_SHIFT = 0.35   // color shift toward white (strongest in filaments)
-const ELM_ATTACK = 0.05        // seconds to peak
-const ELM_DECAY_TAU = 0.13     // brightness e-folding after the peak
-const ELM_MAX_AGE = 0.7        // envelope considered over after this
+// The envelope tracks the sim's elm_active flag directly so the visual stays
+// in sync with the Dα trace: it rises fast while the ELM is on and collapses
+// promptly when it ends, leaving nothing visible between ELMs.
+const ELM_ATTACK = 0.02        // seconds to full brightness while active
+const ELM_DECAY_TAU = 0.04     // brightness e-folding once elm_active clears
+const ELM_TAIL = 0.15          // envelope forced to zero this long after turn-off
 const ELM_STRIPE_COUNT = 11    // filaments around the poloidal cross-section
                                // (integer → continuous across the inboard seam)
-const ELM_STRIPE_SPEED = 22.0  // rad/s — fast toroidal drift; edge rotation in
-                               // a real tokamak is tens of km/s, so the
-                               // filament pattern whips around the torus
+// Edge toroidal rotation is tens of km/s — the filament pattern completes many
+// turns per frame, so at display rate it reads as rapid flashes at different
+// swirl phases rather than a smoothly rotating pattern. That temporal aliasing
+// is the intended look (it is what a limited-frame-rate camera actually sees).
+const ELM_STRIPE_SPEED = 2200.0  // rad/s
 const ELM_FIL_WHITE = 0.65     // filament share of the white shift
 
 /** GLSL-style smoothstep: Hermite interpolation clamped to [0,1]. */
@@ -835,18 +840,23 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   let legIdxCount = 0
 
   // ═══ ELM EVENT ENVELOPE ═══
-  let elmPrevActive = false
-  let elmT0 = -Infinity   // scene-clock time of the last ELM crash
-  let elmAmp = 0          // per-event amplitude from elm_energy_loss
+  // Driven directly by the sim's elm_active flag so the visual is in sync
+  // with the Dα trace rather than free-running on its own timer.
+  let elmActiveNow = false
+  let elmOnT0 = -Infinity   // animation-clock time elm_active went true
+  let elmOffT0 = -Infinity  // ... and when it went false
+  let elmOffLevel = 0       // envelope value captured at turn-off
+  let elmAmp = 0            // per-event amplitude from elm_energy_loss
   let lastParams: PlasmaUpdateParams | null = null
 
-  /** Event envelope: fast attack, exponential decay. */
+  /** Fast rise while the ELM is on, prompt collapse once it clears. */
   const elmEnvelope = (time: number): number => {
-    const dt = time - elmT0
-    if (dt < 0 || dt > ELM_MAX_AGE) return 0
-    return dt < ELM_ATTACK
-      ? dt / ELM_ATTACK
-      : Math.exp(-(dt - ELM_ATTACK) / ELM_DECAY_TAU)
+    if (elmActiveNow) {
+      return Math.min(Math.max(time - elmOnT0, 0) / ELM_ATTACK, 1)
+    }
+    const dt = time - elmOffT0
+    if (dt < 0 || dt > ELM_TAIL) return 0
+    return elmOffLevel * Math.exp(-dt / ELM_DECAY_TAU)
   }
 
   // ═══ COLOR APPLICATION ═══
@@ -942,15 +952,19 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
       return
     }
 
-    // ── ELM event: trigger on the rising edge of elm_active ──
-    if (params.elmActive && !elmPrevActive) {
-      elmT0 = params.time
+    // ── ELM event: follow the elm_active flag's edges ──
+    if (params.elmActive && !elmActiveNow) {
+      elmOnT0 = params.time
       // Scale the eruption with the crash energy (MJ): DIII-D-size ELMs
       // (~30 kJ) ≈ 1.0, JET/ITER-size crashes saturate at 1.6.
       const loss = Math.max(params.elmEnergyLoss ?? 0, 0)
       elmAmp = Math.min(0.6 + Math.sqrt(loss) * 2.5, 1.6)
+    } else if (!params.elmActive && elmActiveNow) {
+      // Capture where the envelope had got to, and decay from there
+      elmOffLevel = Math.min(Math.max(params.time - elmOnT0, 0) / ELM_ATTACK, 1)
+      elmOffT0 = params.time
     }
-    elmPrevActive = params.elmActive
+    elmActiveNow = params.elmActive
     lastParams = params
 
     // ── Separatrix geometry (rebuilt only when the contour changes) ──
@@ -990,10 +1004,10 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   // ═══ TICK (display-rate animation between sim snapshots) ═══
   const tick = (time: number) => {
     // Re-run the per-vertex color write only while an ELM envelope is alive,
-    // so the barbershop stripes rotate smoothly; the plasma is otherwise
-    // static between sim ticks and needs no per-frame work.
+    // so the swirling filaments animate; the plasma is otherwise static
+    // between sim ticks and needs no per-frame work.
     if (!lastParams) return
-    if (time - elmT0 <= ELM_MAX_AGE) applyColors(time)
+    if (elmActiveNow || time - elmOffT0 <= ELM_TAIL) applyColors(time)
   }
 
   return { group, sepMaterial, legMaterial, update, tick }

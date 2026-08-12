@@ -34,7 +34,19 @@ interface SceneState {
   lastDeviceId: string | null
   lastWallJson: string | null
   clock: THREE.Clock
+  /**
+   * Animation clock (seconds) driving glow flicker and ELM swirl. Advances
+   * with real time, but ONLY while the simulation is actually stepping — so
+   * pausing the shot freezes the plasma visuals instead of leaving them
+   * shimmering. Tracked via the wall-clock time of the last sim-time change.
+   */
+  animTime: number
+  lastSimTime: number
+  lastSimAdvanceWall: number
 }
+
+/** No sim-time change for this long ⇒ treat the shot as paused. */
+const PAUSE_GRACE_MS = 200
 
 export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, deviceR0, deviceA }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -93,6 +105,9 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       lastDeviceId: null,
       lastWallJson: null,
       clock,
+      animTime: 0,
+      lastSimTime: -1,
+      lastSimAdvanceWall: 0,
     }
     stateRef.current = state
 
@@ -100,12 +115,17 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     let rafRunning = false
     const animate = () => {
       state.animFrameId = requestAnimationFrame(animate)
-      // Time-based animation (glow shimmer, ELM filaments) runs at display
-      // rate here; simulation-driven state updates arrive via the snapshot
-      // effect at physics-tick rate.
-      const t = state.clock.getElapsedTime()
-      state.plasmaGroup?.tick(t)
-      state.glowGroup?.tick(t)
+      // Time-based animation (glow shimmer, ELM swirl) runs at display rate
+      // here; simulation-driven state updates arrive via the snapshot effect
+      // at physics-tick rate. The animation clock is frozen while the shot is
+      // paused so the plasma holds still rather than shimmering on.
+      // Clamped so resuming a hidden tab (where the loop was stopped) cannot
+      // jump the animation clock by the whole time spent hidden.
+      const dt = Math.min(state.clock.getDelta(), 0.1)
+      const running = performance.now() - state.lastSimAdvanceWall < PAUSE_GRACE_MS
+      if (running) state.animTime += dt
+      state.plasmaGroup?.tick(state.animTime)
+      state.glowGroup?.tick(state.animTime)
       postProcessing.composer.render()
     }
     const startLoop = () => {
@@ -311,6 +331,13 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
       return
     }
 
+    // Note when sim time last advanced — the RAF loop uses this to decide
+    // whether the shot is running, and freezes animation while it is paused.
+    if (snapshot.time !== state.lastSimTime) {
+      state.lastSimTime = snapshot.time
+      state.lastSimAdvanceWall = performance.now()
+    }
+
     getPortConfig(deviceId, deviceR0, deviceA)
     const opacityScale = DEVICE_OPACITY_SCALE[deviceId ?? ''] ?? DEFAULT_OPACITY_SCALE
     const glowTuning = DEVICE_GLOW_TUNING[deviceId ?? ''] ?? DEFAULT_GLOW_TUNING
@@ -374,7 +401,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         pRadFrac: snapshot.p_loss > 0.1 ? snapshot.p_rad / snapshot.p_loss : 0,
         opacity: opacityScale,
         limiterPts: pts,
-        time: state.clock.getElapsedTime(),
+        time: state.animTime,
       })
     }
 
@@ -473,7 +500,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
         bandWidth: divVis.bandWidth,
         color: glowColor,
         axisR: snapshot.axis_r,
-        time: state.clock.getElapsedTime(),
+        time: state.animTime,
       })
 
       // Update wall illumination from strike points, proportional to glow
