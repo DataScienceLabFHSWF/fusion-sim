@@ -275,7 +275,7 @@ const PORT_CONFIGS: Record<string, PortConfig> = {
     ],
     fresnelStrength: 0.25,
     inboardStyle: 'bands',
-    bandWidth: 0.06,
+    bandWidth: 0.16,   // centre-stack lamella height (was 0.06 — read too fine)
     // JET octant panel banding — 8 octants around the torus.
     // The toroidal grid spacing is 0.10m, and the wall has 100 slices
     // over 2π. Band width is the toroidal arc per octant: 2π*R0/8 ≈ 2.24m
