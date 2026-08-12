@@ -59,7 +59,9 @@ const ELM_DECAY_TAU = 0.13     // brightness e-folding after the peak
 const ELM_MAX_AGE = 0.7        // envelope considered over after this
 const ELM_STRIPE_COUNT = 11    // filaments around the poloidal cross-section
                                // (integer → continuous across the inboard seam)
-const ELM_STRIPE_SPEED = 2.2   // rad/s — slow rotation/drift of the pattern
+const ELM_STRIPE_SPEED = 22.0  // rad/s — fast toroidal drift; edge rotation in
+                               // a real tokamak is tens of km/s, so the
+                               // filament pattern whips around the torus
 const ELM_FIL_WHITE = 0.65     // filament share of the white shift
 
 /** GLSL-style smoothstep: Hermite interpolation clamped to [0,1]. */

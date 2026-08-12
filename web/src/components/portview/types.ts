@@ -44,8 +44,10 @@ export interface PortConfig {
   }[]
   antennae?: { r: number; zMin: number; zMax: number; phiMin: number; phiMax: number }[]
   fresnelStrength?: number
-  /** Scale on the procedural tile fastener-hole radius (1 = default ~8 mm) */
+  /** Scale on the procedural tile fastener-hole radius (1 = default ~8 mm, 0 = none) */
   boltHoleScale?: number
+  /** Same for the inboard/centre-column tiles; defaults to boltHoleScale */
+  boltHoleScaleInboard?: number
   inboardStyle?: 'tiles' | 'bands'
   bandWidth?: number
   /** Vertical (toroidal) band width in metres; 0 = off. JET octant panels. */

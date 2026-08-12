@@ -10,7 +10,8 @@ uniform vec2 u_limiterGridSpacing;
 uniform vec2 u_divertorGridSpacing;
 uniform float u_tileGridDarken;
 uniform float u_fresnelStrength;
-uniform float u_boltHoleScale;    // per-device tile fastener-hole size
+uniform float u_boltHoleScale;        // per-device tile fastener-hole size (0 = none)
+uniform float u_boltHoleScaleInboard; // same, for the inboard/centre-column tiles
 uniform float u_borderWidth;
 uniform float u_totalArc;         // total poloidal arc length in metres
 uniform float u_nSlices;          // number of toroidal slices
@@ -75,7 +76,7 @@ float vnoise(vec2 p) {
 
 // Height (metres) of the wall detail at a point in (poloidal-arc, toroidal-arc)
 // space. isBands=1 switches to horizontal-band seams only (JET inboard style).
-float tileHeight(vec2 pos, vec2 spacing, float isBands) {
+float tileHeight(vec2 pos, vec2 spacing, float isBands, float boltScale) {
   vec2 cell = pos / spacing;
   vec2 id = floor(cell);
   vec2 f = fract(cell);
@@ -92,14 +93,15 @@ float tileHeight(vec2 pos, vec2 spacing, float isBands) {
   float ry = hash21(id + 3.1) - 0.5;
   h += ((f.x - 0.5) * rx + (f.y - 0.5) * ry) * 0.0015 * (1.0 - isBands);
 
-  // Fastener hole dimples (two per tile), only on reasonably large tiles
-  if (isBands < 0.5 && spacing.x > 0.06) {
+  // Fastener hole dimples (two per tile), only on reasonably large tiles.
+  // boltScale = 0 disables them (also avoids a degenerate smoothstep).
+  if (isBands < 0.5 && spacing.x > 0.06 && boltScale > 0.01) {
     vec2 local = (f - 0.5) * spacing;  // metres from tile centre
     float holeOffset = 0.25 * spacing.y;
     float d1 = length(local - vec2(0.0, holeOffset));
     float d2 = length(local + vec2(0.0, holeOffset));
     float dh = min(d1, d2);
-    h -= (1.0 - smoothstep(0.004 * u_boltHoleScale, 0.009 * u_boltHoleScale, dh)) * 0.004;
+    h -= (1.0 - smoothstep(0.004 * boltScale, 0.009 * boltScale, dh)) * 0.004;
   }
 
   // Fine graphite grain
@@ -108,14 +110,14 @@ float tileHeight(vec2 pos, vec2 spacing, float isBands) {
 }
 
 // Mask (0..1) of the fastener holes, for albedo darkening.
-float tileHoleMask(vec2 pos, vec2 spacing, float isBands) {
-  if (isBands > 0.5 || spacing.x <= 0.06) return 0.0;
+float tileHoleMask(vec2 pos, vec2 spacing, float isBands, float boltScale) {
+  if (isBands > 0.5 || spacing.x <= 0.06 || boltScale <= 0.01) return 0.0;
   vec2 f = fract(pos / spacing);
   vec2 local = (f - 0.5) * spacing;
   float holeOffset = 0.25 * spacing.y;
   float d1 = length(local - vec2(0.0, holeOffset));
   float d2 = length(local + vec2(0.0, holeOffset));
-  return 1.0 - smoothstep(0.003 * u_boltHoleScale, 0.008 * u_boltHoleScale, min(d1, d2));
+  return 1.0 - smoothstep(0.003 * boltScale, 0.008 * boltScale, min(d1, d2));
 }
 
 void main() {
@@ -157,11 +159,15 @@ void main() {
     gp = gridProximity(worldUV, spacing);
   }
 
+  // Fastener-hole size for this region: the inboard column can differ from
+  // the rest of the vessel (e.g. DIII-D's centre column is smooth).
+  float boltScale = (region == 1) ? u_boltHoleScaleInboard : u_boltHoleScale;
+
   // ── Tile relief: perturb the normal with the height-field gradient ──
-  float h0 = tileHeight(worldUV, reliefSpacing, isBands);
+  float h0 = tileHeight(worldUV, reliefSpacing, isBands, boltScale);
   const float RELIEF_EPS = 0.004;  // 4 mm gradient sample distance
-  float hx = tileHeight(worldUV + vec2(RELIEF_EPS, 0.0), reliefSpacing, isBands);
-  float hy = tileHeight(worldUV + vec2(0.0, RELIEF_EPS), reliefSpacing, isBands);
+  float hx = tileHeight(worldUV + vec2(RELIEF_EPS, 0.0), reliefSpacing, isBands, boltScale);
+  float hy = tileHeight(worldUV + vec2(0.0, RELIEF_EPS), reliefSpacing, isBands, boltScale);
   vec2 hGrad = vec2(hx - h0, hy - h0) / RELIEF_EPS;
   // Tangent frame on the torus: toroidal direction is horizontal around the
   // machine axis; poloidal direction completes the frame with the normal.
@@ -172,7 +178,7 @@ void main() {
   float reliefFade = clamp(1.0 - v_depth / u_maxDepth * 0.85, 0.15, 1.0);
   vec3 N = normalize(Ngeom - 1.8 * reliefFade * (Tpol * hGrad.x + Ttor * hGrad.y));
 
-  float holeMask = tileHoleMask(worldUV, reliefSpacing, isBands);
+  float holeMask = tileHoleMask(worldUV, reliefSpacing, isBands, boltScale);
   float tileRand = hash21(floor(worldUV / reliefSpacing) + 0.5);
 
   // ── Vertical (toroidal) banding — JET-style octant panels ──
