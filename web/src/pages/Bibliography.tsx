@@ -701,7 +701,7 @@ export default function Bibliography() {
             <li><strong>Precursor</strong> (50-100 ms): Growing locked mode oscillation with exponential growth rate ~20 s⁻¹</li>
             <li><strong>Thermal Quench</strong> (1-2 ms): Exponential T<sub>e</sub> collapse to ~1% of pre-disruption value</li>
             <li><strong>Current Quench</strong> (5-50 ms): L/R decay with transient I<sub>p</sub> overshoot spike</li>
-            <li><strong>Termination</strong>: Plasma current reaches zero, discharge ended</li>
+            <li><strong>Termination</strong>: Plasma current reaches zero, pulse ended</li>
           </ol>
         </Section>
 

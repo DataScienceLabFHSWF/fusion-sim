@@ -5,7 +5,7 @@ import {
   getPreset,
   type PresetId,
   type WaveformPoint,
-  type DischargeProgram,
+  type PulseProgram,
 } from '../lib/wasm'
 
 // ── Preset metadata ──────────────────────────────────────────────
@@ -25,7 +25,7 @@ const ALL_PRESETS: { id: PresetId; name: string; desc: string; color: string }[]
   {
     id: 'density_limit',
     name: 'Density Limit',
-    desc: 'Over-fuelled shot — pushes past the Greenwald limit. Will it disrupt?',
+    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
     color: 'red',
   },
 ]
@@ -41,7 +41,7 @@ const CENTAUR_PRESETS: typeof ALL_PRESETS = [
   {
     id: 'density_limit',
     name: 'Density Limit',
-    desc: 'Over-fuelled shot — pushes past the Greenwald limit. Will it disrupt?',
+    desc: 'Over-fuelled plasma — pushes past the Greenwald limit. Will it disrupt?',
     color: 'red',
   },
 ]
@@ -133,7 +133,7 @@ function WaveformRow({
 }
 
 // ── Main page ────────────────────────────────────────────────────
-export default function ProgramDischarge() {
+export default function ProgramPulse() {
   const { deviceId } = useParams<{ deviceId: string }>()
   const navigate = useNavigate()
 
@@ -141,7 +141,7 @@ export default function ProgramDischarge() {
   const [selected, setSelected] = useState<PresetId>('hmode')
 
   // Load the selected preset's waveforms
-  const program: DischargeProgram | null = useMemo(
+  const program: PulseProgram | null = useMemo(
     () => (deviceId ? getPreset(deviceId, selected) : null),
     [deviceId, selected],
   )
@@ -175,7 +175,7 @@ export default function ProgramDischarge() {
       <main className="flex-1 w-full max-w-5xl mx-auto px-6 sm:px-10 py-12">
         {/* Header */}
         <div className="panel-title mb-2">
-          <span className="panel-num">02 · </span>Program discharge
+          <span className="panel-num">02 · </span>Program pulse
         </div>
         <h1 className="font-mono text-3xl sm:text-4xl font-bold tracking-tight text-white mb-2">
           {device.name}
@@ -234,7 +234,7 @@ export default function ProgramDischarge() {
           onClick={() => navigate(`/run/${deviceId}?preset=${selected}`)}
           className="bg-cyan-600 px-8 py-3 text-base cursor-pointer"
         >
-          ▶ Run discharge
+          ▶ Run pulse
         </button>
       </main>
     </div>

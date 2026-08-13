@@ -35,7 +35,7 @@ covers every directory, file, module, and major function in the project.
    - [EquilibriumCanvas — 2D Cross-Section](#equilibriumcanvas--2d-cross-section)
    - [StatusPanel — Parameter Dashboard](#statuspanel--parameter-dashboard)
    - [UnifiedTracePanel — Time Traces](#unifiedtracepanel--time-traces)
-   - [ShotPlanner — Discharge Editor](#shotplanner--discharge-editor)
+   - [ShotPlanner — Pulse Editor](#shotplanner--pulse-editor)
    - [ProfilePanel — Radial Profiles](#profilepanel--radial-profiles)
    - [PortView (3D) — Tokamak Visualization](#portview-3d--tokamak-visualization)
    - [Supporting Components](#supporting-components)
@@ -55,7 +55,7 @@ room interface.
 
 Four tokamak devices are modeled: **DIII-D**, **JET**, **ITER**, and **CENTAUR**
 (conceptual negative-triangularity), each with device-specific geometry, heating
-limits, and wall outlines. Three discharge presets are available per device:
+limits, and wall outlines. Three pulse presets are available per device:
 **H-mode**, **L-mode**, and **Density Limit**.
 
 The simulator uses 0D (volume-averaged) power balance with analytic equilibrium
@@ -88,7 +88,7 @@ fusion-sim/
 │           ├── disruption.rs   # Disruption risk & dynamics
 │           ├── diagnostics.rs  # Synthetic diagnostic signals
 │           ├── contour.rs      # Marching squares contour extraction
-│           ├── simulation.rs   # Top-level orchestrator + DischargeProgram
+│           ├── simulation.rs   # Top-level orchestrator + PulseProgram
 │           └── wasm_api.rs     # wasm-bindgen API surface
 │
 └── web/                        # Frontend application
@@ -118,7 +118,7 @@ fusion-sim/
         │   ├── EquilibriumCanvas.tsx  # 2D poloidal cross-section (Canvas API)
         │   ├── StatusPanel.tsx        # Parameter dashboard + sub-panels
         │   ├── UnifiedTracePanel.tsx  # Time trace viewer (19 channels)
-        │   ├── ShotPlanner.tsx        # Discharge parameter editor
+        │   ├── ShotPlanner.tsx        # Pulse parameter editor
         │   ├── ProfilePanel.tsx       # Te/ne/pressure profile viewer
         │   ├── DisruptionGauge.tsx    # Vertical disruption risk gauge
         │   ├── InfoPopup.tsx          # Reusable info popup
@@ -142,7 +142,7 @@ fusion-sim/
         │
         ├── pages/              # Route-level page components
         │   ├── DeviceSelect.tsx       # Landing page — device cards
-        │   ├── ProgramDischarge.tsx   # Pre-run waveform review
+        │   ├── ProgramPulse.tsx       # Pre-run waveform review
         │   ├── ControlRoom.tsx        # Main simulation control room
         │   └── Bibliography.tsx       # Physics bibliography + citations
         │
@@ -298,7 +298,7 @@ with L-H transition, ELM dynamics, and disruption coupling.
 | Type | Description |
 |------|-------------|
 | `TransportModel` | Full transport state: Ip, ne, Te, Wth, tau_e, q95, beta_n, f_gw, h98, li, vloop, radiation, confinement mode, impurity fraction, ELM state |
-| `ProgramValues` | Current actuator values interpolated from discharge program waveforms |
+| `ProgramValues` | Current actuator values interpolated from pulse program waveforms |
 
 #### Physics Model
 
@@ -540,14 +540,14 @@ coherent time-stepping simulation.
 
 | Type | Description |
 |------|-------------|
-| `DischargeProgram` | Complete discharge specification: 10 waveform channels (Ip, Bt, ne_target, P_NBI, P_ECH, P_ICH, kappa, delta, d2_puff, neon_puff) + duration + config_override |
+| `PulseProgram` | Complete pulse specification: 10 waveform channels (Ip, Bt, ne_target, P_NBI, P_ECH, P_ICH, kappa, delta, d2_puff, neon_puff) + duration + config_override |
 | `WaveformPoint` | `[f64; 2]` — (time, value) pair |
 | `SimulationSnapshot` | Complete state dump: all transport variables, equilibrium geometry (separatrix, flux surfaces, axis, X-points), profiles, diagnostics, disruption state |
-| `Simulation` | Main simulation struct: Device + TransportModel + Profiles + CerfonEquilibrium + DisruptionModel + DiagnosticSignals + DischargeProgram |
+| `Simulation` | Main simulation struct: Device + TransportModel + Profiles + CerfonEquilibrium + DisruptionModel + DiagnosticSignals + PulseProgram |
 
-#### Discharge Presets
+#### Pulse Presets
 
-Three built-in presets per device, constructed by `DischargeProgram` factory methods:
+Three built-in presets per device, constructed by `PulseProgram` factory methods:
 
 | Preset | Description |
 |--------|-------------|
@@ -567,7 +567,7 @@ Presets scale their waveforms to each device's engineering limits (Ip_max, Bt_ma
 | `Simulation::snapshot()` | Returns complete state as `SimulationSnapshot` |
 | `Simulation::is_finished()` | Returns true when simulation time exceeds program duration |
 | `interp_waveform()` | Linear interpolation of waveform at time t |
-| `DischargeProgram::to_json()` | Serializes program for WASM boundary |
+| `PulseProgram::to_json()` | Serializes program for WASM boundary |
 
 ---
 
@@ -594,7 +594,7 @@ Defines the **wasm-bindgen API surface** that the JavaScript/TypeScript frontend
 | `SimHandle::step()` | `(dt: f64)` | Advance one time step |
 | `SimHandle::snapshot_json()` | `() -> String` | Returns full snapshot as JSON string |
 | `SimHandle::wall_json()` | `() -> String` | Returns wall geometry as JSON |
-| `SimHandle::program_json()` | `() -> String` | Returns discharge program as JSON |
+| `SimHandle::program_json()` | `() -> String` | Returns pulse program as JSON |
 | `SimHandle::is_finished()` | `() -> bool` | Check if simulation is complete |
 | `get_devices_json()` | `() -> String` | List all devices as JSON array |
 | `get_preset_json()` | `(device_id: &str, preset: &str) -> String` | Get preset waveforms as JSON |
@@ -631,7 +631,7 @@ flows exclusively through JSON strings:
 └─────────────────────────────────┘
 ```
 
-The `SimHandle` is created once per discharge and reused. Each animation frame,
+The `SimHandle` is created once per pulse and reused. Each animation frame,
 the TypeScript side calls `step()` multiple times (typically 3 sub-steps per
 frame at DT=0.005s) and then `snapshot_json()` once to get the display state.
 
@@ -653,7 +653,7 @@ Manages WASM module lifecycle with a **singleton initialization pattern**.
 | `isWasmReady()` | Returns true after successful initialization |
 | `getDevices()` | Returns array of `Device` objects from WASM |
 | `getDevice(id)` | Returns a single device by ID |
-| `getPreset(deviceId, presetId)` | Returns a `DischargeProgram` with all waveforms |
+| `getPreset(deviceId, presetId)` | Returns a `PulseProgram` with all waveforms |
 
 Also re-exports `SimHandle` from the WASM module for direct use.
 
@@ -787,7 +787,7 @@ web/src/lib/targetTraces.ts (134 lines)
 ```
 
 Computes **target/reference traces** overlaid on time trace plots, showing what
-the discharge program commands.
+the pulse program commands.
 
 | Function | Description |
 |----------|-------------|
@@ -849,7 +849,7 @@ multiple sub-panels.
 | `NeutronDiagnostic` | 8-segment signal bar with log-scale mapping |
 | `DivertorLoading` | Heat flux bar + surface temperature for tungsten, recrystallization warning |
 | `DisruptionRisk` | Risk bar referencing `DisruptionGauge` |
-| Profile toggle | Switches to `ProfilePanel` after discharge completes |
+| Profile toggle | Switches to `ProfilePanel` after pulse completes |
 
 ---
 
@@ -870,7 +870,7 @@ ne_line, Wth, Pin, Prad, Ploss, Vloop, f_imp, disruption_risk.
 
 Features:
 - User-selectable trace channels via dropdown
-- Target trace overlay (from discharge program)
+- Target trace overlay (from pulse program)
 - Time scrubbing (click/drag to scrub through history)
 - ELM markers on D-alpha trace
 - Auto-scaling Y axes
@@ -878,13 +878,13 @@ Features:
 
 ---
 
-### ShotPlanner — Discharge Editor
+### ShotPlanner — Pulse Editor
 
 ```
 web/src/components/ShotPlanner.tsx (394 lines)
 ```
 
-A **slide-out drawer** for editing discharge parameters before or during a run.
+A **slide-out drawer** for editing pulse parameters before or during a run.
 
 #### Editable Parameters
 
@@ -978,7 +978,7 @@ The 3D view shows:
 ```
 App.tsx routes:
   /                    → DeviceSelect
-  /program/:deviceId   → ProgramDischarge
+  /program/:deviceId   → ProgramPulse
   /run/:deviceId       → ControlRoom
   /bibliography        → Bibliography
 ```
@@ -986,12 +986,12 @@ App.tsx routes:
 ### DeviceSelect
 
 Landing page with cards for DIII-D, JET, ITER, and CENTAUR. Each card shows device
-parameters (R0, a, Bt, Ip) and links to the ProgramDischarge page.
+parameters (R0, a, Bt, Ip) and links to the ProgramPulse page.
 
-### ProgramDischarge
+### ProgramPulse
 
-Pre-run page for reviewing discharge waveforms. Offers three preset scenarios
-per device with sparkline visualization of all waveform channels. "Run Discharge"
+Pre-run page for reviewing pulse waveforms. Offers three preset scenarios
+per device with sparkline visualization of all waveform channels. "Run Pulse"
 button navigates to ControlRoom.
 
 ### ControlRoom
@@ -1018,7 +1018,7 @@ approximations, and attribution to the Columbia Fusion Research Center.
 
 ```
                            ┌──────────────────────────┐
-                           │     DischargeProgram      │
+                           │     PulseProgram      │
                            │  (10 waveforms + duration)│
                            └────────────┬─────────────┘
                                         │

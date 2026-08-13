@@ -476,7 +476,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
   const strikeGlowRef = useRef(0)       // current fade level 0–1
   const legFadeRef = useRef(0)          // divertor leg fade level 0–1
   const prevTimeRef = useRef<number>(0)  // previous snapshot time for dt calc
-  const maxProgIpRef = useRef(0)        // peak |prog_ip| seen this discharge
+  const maxProgIpRef = useRef(0)        // peak |prog_ip| seen this pulse
   const lastDrawTimeRef = useRef(0)     // throttle port view to ~20fps
 
   // Resolve wall points: prefer limiterPoints, fall back to parsed wallJson
@@ -702,11 +702,11 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // ── Time delta for fade effects ──
     // Computed early so fades update even during early returns (betaN < 0.15).
     const dt = Math.abs(snapshot.time - prevTimeRef.current)
-    // Detect new discharge (time jumped backward) — reset tracking state
+    // Detect new pulse (time jumped backward) — reset tracking state
     if (snapshot.time < prevTimeRef.current - 0.5) {
       maxProgIpRef.current = 0
       legFadeRef.current = 0
-      lastDrawTimeRef.current = 0  // force first frame of new discharge to draw
+      lastDrawTimeRef.current = 0  // force first frame of new pulse to draw
     }
     prevTimeRef.current = snapshot.time
 
@@ -714,7 +714,7 @@ export default function PortView({ snapshot, limiterPoints, deviceId, wallJson, 
     // Legs appear when the programmed Ip has reached its flat-top value
     // (progIpFrac ≈ 1.0) and fade out as soon as ramp-down begins
     // (progIpFrac drops below threshold).  This uses peak-tracking: we
-    // record the maximum |prog_ip| seen this discharge, then compare the
+    // record the maximum |prog_ip| seen this pulse, then compare the
     // current value to that peak.  During ramp-down prog_ip drops while
     // both ip and prog_ip decrease together (so ip/prog_ip stays ~1.0),
     // but progIpFrac correctly detects the descent from flat-top.

@@ -7,7 +7,7 @@
 use wasm_bindgen::prelude::*;
 
 use crate::devices;
-use crate::simulation::{DischargeProgram, Simulation, SimulationSnapshot};
+use crate::simulation::{PulseProgram, Simulation, SimulationSnapshot};
 
 /// Generate a u64 seed from JS `Math.random()`.
 fn js_random_seed() -> u64 {
@@ -37,27 +37,27 @@ pub fn get_device_json(id: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Preset discharge programs
+// Preset pulse programs
 // ---------------------------------------------------------------------------
 
-/// Return the standard H-mode discharge program as JSON.
+/// Return the standard H-mode pulse program as JSON.
 #[wasm_bindgen]
 pub fn preset_hmode_json(device_id: &str) -> String {
     match devices::get_device(device_id) {
         Some(d) => {
-            let prog = DischargeProgram::standard_hmode(&d);
+            let prog = PulseProgram::standard_hmode(&d);
             serde_json::to_string(&prog).unwrap_or_default()
         }
         None => String::new(),
     }
 }
 
-/// Return the L-mode discharge program as JSON.
+/// Return the L-mode pulse program as JSON.
 #[wasm_bindgen]
 pub fn preset_lmode_json(device_id: &str) -> String {
     match devices::get_device(device_id) {
         Some(d) => {
-            let prog = DischargeProgram::lmode(&d);
+            let prog = PulseProgram::lmode(&d);
             serde_json::to_string(&prog).unwrap_or_default()
         }
         None => String::new(),
@@ -69,7 +69,7 @@ pub fn preset_lmode_json(device_id: &str) -> String {
 pub fn preset_density_limit_json(device_id: &str) -> String {
     match devices::get_device(device_id) {
         Some(d) => {
-            let prog = DischargeProgram::density_limit(&d);
+            let prog = PulseProgram::density_limit(&d);
             serde_json::to_string(&prog).unwrap_or_default()
         }
         None => String::new(),
@@ -88,14 +88,14 @@ pub struct SimHandle {
 
 #[wasm_bindgen]
 impl SimHandle {
-    /// Create a new simulation from a device id and a JSON discharge program.
+    /// Create a new simulation from a device id and a JSON pulse program.
     /// Returns `None` (throws in JS) if inputs are invalid.
     #[wasm_bindgen(constructor)]
     pub fn new(device_id: &str, program_json: &str) -> Result<SimHandle, JsValue> {
         let device = devices::get_device(device_id)
             .ok_or_else(|| JsValue::from_str(&format!("Unknown device: {device_id}")))?;
 
-        let program: DischargeProgram = serde_json::from_str(program_json)
+        let program: PulseProgram = serde_json::from_str(program_json)
             .map_err(|e| JsValue::from_str(&format!("Bad program JSON: {e}")))?;
 
         let mut sim = Simulation::new(device, program);
@@ -110,9 +110,9 @@ impl SimHandle {
             .ok_or_else(|| JsValue::from_str(&format!("Unknown device: {device_id}")))?;
 
         let program = match preset {
-            "hmode" => DischargeProgram::standard_hmode(&device),
-            "lmode" => DischargeProgram::lmode(&device),
-            "density_limit" => DischargeProgram::density_limit(&device),
+            "hmode" => PulseProgram::standard_hmode(&device),
+            "lmode" => PulseProgram::lmode(&device),
+            "density_limit" => PulseProgram::density_limit(&device),
             _ => return Err(JsValue::from_str(&format!("Unknown preset: {preset}"))),
         };
 

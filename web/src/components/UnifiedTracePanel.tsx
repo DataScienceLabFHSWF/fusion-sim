@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import type { TracePoint } from '../lib/types'
-import type { DischargeProgram } from '../lib/wasm'
+import type { PulseProgram } from '../lib/wasm'
 import { getDevice } from '../lib/wasm'
 import { computeTargetTraces, type TargetTraces } from '../lib/targetTraces'
 import InfoPopup from './InfoPopup'
@@ -152,7 +152,7 @@ export default function UnifiedTracePanel({
   // Parse program & compute target traces (memoized)
   const targets = useMemo<TargetTraces | null>(() => {
     try {
-      const program: DischargeProgram = JSON.parse(programJson)
+      const program: PulseProgram = JSON.parse(programJson)
       const device = getDevice(deviceId)
       if (!device || !program.ip) return null
       return computeTargetTraces(program, device)

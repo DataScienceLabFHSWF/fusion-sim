@@ -5,12 +5,12 @@ import { processProfileFrames } from './profileUtils'
 import { computeFusion } from './fusionPhysics'
 
 const DT = 0.005 // 5 ms physics timestep
-// Trace history (lightweight: ~200 bytes/entry) — large buffer for full-discharge coverage.
-// 30,000 entries ≈ 500s at 60fps (enough for ITER 400s shots at 1x speed). ~6 MB.
+// Trace history (lightweight: ~200 bytes/entry) — large buffer for full-pulse coverage.
+// 30,000 entries ≈ 500s at 60fps (enough for ITER 400s pulses at 1x speed). ~6 MB.
 const MAX_TRACE_HISTORY = 30000
 // Snapshot history (heavy: ~50 KB/entry with equilibrium contours).
-// 8,000 entries ≈ 133s at 60fps — enough for ITER's full 100s discharge.
-// Post-discharge scrubbing uses time-based lookup. ~400 MB max.
+// 8,000 entries ≈ 133s at 60fps — enough for ITER's full 100s pulse.
+// Post-pulse scrubbing uses time-based lookup. ~400 MB max.
 const MAX_SNAPSHOT_HISTORY = 8000
 
 export interface SimState {
@@ -20,10 +20,10 @@ export interface SimState {
   snapshotHistory: Snapshot[]          // full snapshots for scrub→equilibrium sync
   running: boolean
   wallJson: string
-  programJson: string                  // current discharge program JSON for target traces
+  programJson: string                  // current pulse program JSON for target traces
   scrubTime: number | null             // null = live, number = sim time for scrub position
   finished: boolean                    // true when status is Complete or Disrupted
-  processedProfiles: ProcessedProfile[] | null  // null while running, populated post-discharge
+  processedProfiles: ProcessedProfile[] | null  // null while running, populated post-pulse
   profileTeMax: number
   profileNeMax: number
   profilePMax: number
@@ -296,7 +296,7 @@ export function useSimulation(
         snapshotHistoryRef.current = snapshotHistoryRef.current.slice(-MAX_SNAPSHOT_HISTORY)
       }
 
-      // Capture profile frame every 50ms for post-discharge viewing
+      // Capture profile frame every 50ms for post-pulse viewing
       if (snap.te_profile && snap.time - lastProfileTimeRef.current >= 0.05) {
         profileFramesRef.current.push({
           time: snap.time,
@@ -310,7 +310,7 @@ export function useSimulation(
       const isFinished = snap.status === 'Complete' || snap.status === 'Disrupted'
 
       setState((prev) => {
-        // Post-discharge: process accumulated profile frames (only once)
+        // Post-pulse: process accumulated profile frames (only once)
         let processedProfiles = prev.processedProfiles
         let profileTeMax = prev.profileTeMax
         let profileNeMax = prev.profileNeMax

@@ -1,10 +1,10 @@
 /**
- * Compute target/reference traces from the discharge program.
+ * Compute target/reference traces from the pulse program.
  *
  * - ipTarget: direct from the programmed Ip waveform
  * - betaNTarget: computed from programmed waveforms using IPB98(y,2) scaling
  */
-import type { DischargeProgram, WaveformPoint, Device } from './wasm'
+import type { PulseProgram, WaveformPoint, Device } from './wasm'
 
 const MU_0 = 4 * Math.PI * 1e-7
 
@@ -63,11 +63,11 @@ export interface TargetTraces {
 }
 
 /**
- * Compute target traces from the discharge program and device parameters.
+ * Compute target traces from the pulse program and device parameters.
  * Called once when the program changes.
  */
 export function computeTargetTraces(
-  program: DischargeProgram,
+  program: PulseProgram,
   device: Device,
 ): TargetTraces {
   // Ip target is directly the programmed waveform

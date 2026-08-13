@@ -144,7 +144,7 @@ export default function DeviceSelect() {
             fusionsimulator<span className="text-gray-600">.io</span>
           </h1>
           <p className="stagger-2 mt-4 text-gray-400 text-base sm:text-lg font-mono tracking-tight">
-            Real-time tokamak discharge simulator
+            Real-time tokamak plasma simulator
           </p>
           <p className="stagger-2 mt-2 text-gray-600 text-[11px] font-mono tracking-wider uppercase">
             0D transport &middot; MHD equilibrium &middot; ELM dynamics &middot; Fusion diagnostics
@@ -296,7 +296,7 @@ export default function DeviceSelect() {
               </div>
 
               <p className="text-center text-gray-600 text-[10px] mt-4">
-                The tour will load DIII-D in H-mode as a reference discharge
+                The tour will load DIII-D in H-mode as a reference pulse
               </p>
             </div>
           </div>

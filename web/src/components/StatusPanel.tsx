@@ -32,14 +32,14 @@ export default function StatusPanel({
   const [showPressure, setShowPressure] = useState(false)
   const [showThomson, setShowThomson] = useState(true)
 
-  // Reset profile view when discharge resets
+  // Reset profile view when pulse resets
   useEffect(() => {
     if (!finished) {
       setShowProfiles(false)
     }
   }, [finished])
 
-  // Can show profiles only after discharge finishes and profiles are processed
+  // Can show profiles only after pulse finishes and profiles are processed
   const canShowProfiles = finished && processedProfiles !== null && processedProfiles.length > 0
 
   // Compute profile index from displayTime
@@ -124,7 +124,7 @@ export default function StatusPanel({
   if (!snapshot) {
     return (
       <div className="p-3 font-mono text-sm text-gray-600 flex items-center justify-center h-full">
-        Awaiting discharge…
+        Awaiting pulse…
       </div>
     )
   }
@@ -162,7 +162,7 @@ export default function StatusPanel({
                       ? 'bg-purple-700 text-purple-200 cursor-pointer'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer'
                 }`}
-                title={!canShowProfiles ? 'Available after discharge completes or when paused' : ''}
+                title={!canShowProfiles ? 'Available after pulse completes or when paused' : ''}
               >
                 {showProfiles ? 'Params' : 'Profiles'}
               </button>
@@ -280,13 +280,13 @@ function PowerBalance({ snapshot: s, fusion, usesIch }: { snapshot: Snapshot; fu
     { label: <><sub>NBI</sub></>, value: s.prog_p_nbi, color: '#56B4E9' },
     { label: <><sub>ECH</sub></>, value: s.prog_p_ech, color: '#CC79A7' },
   ]
-  // Reserve the ICH row for the whole discharge when this device programs ICH,
+  // Reserve the ICH row for the whole pulse when this device programs ICH,
   // so it doesn't pop in mid-ramp and shift the other rows.
   if (usesIch || s.prog_p_ich > 0.01) {
     inputItems.push({ label: <><sub>ICH</sub></>, value: s.prog_p_ich, color: '#E69F00' })
   }
   // Alpha heating bar: always present for DT (shows 0 before fusion onset),
-  // so the panel layout doesn't shift when alpha power appears mid-discharge.
+  // so the panel layout doesn't shift when alpha power appears mid-pulse.
   if (isDT) {
     inputItems.push({ label: <><sub>&alpha;</sub></>, value: pAlpha, color: '#009E73' })
   }

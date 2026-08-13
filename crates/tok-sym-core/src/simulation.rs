@@ -14,9 +14,9 @@ use crate::transport::{ProgramValues, TransportModel};
 /// A point in a programmed waveform: (time_s, value).
 pub type WaveformPoint = (f64, f64);
 
-/// Discharge program: collection of time-dependent waveforms.
+/// Pulse program: collection of time-dependent waveforms.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DischargeProgram {
+pub struct PulseProgram {
     /// Plasma current waveform (s, MA)
     pub ip: Vec<WaveformPoint>,
     /// Toroidal field waveform (s, T)
@@ -37,7 +37,7 @@ pub struct DischargeProgram {
     pub d2_puff: Vec<WaveformPoint>,
     /// Neon impurity seeding rate (s, 10²⁰ particles/s)
     pub neon_puff: Vec<WaveformPoint>,
-    /// Total discharge duration (s)
+    /// Total pulse duration (s)
     pub duration: f64,
     /// Magnetic configuration override ("LowerSingleNull", "UpperSingleNull",
     /// "DoubleNull").  When absent, falls back to the device default.
@@ -45,7 +45,7 @@ pub struct DischargeProgram {
     pub config_override: Option<String>,
 }
 
-impl DischargeProgram {
+impl PulseProgram {
     /// Interpolate a waveform at time t.
     pub fn interpolate(waveform: &[(f64, f64)], t: f64) -> f64 {
         if waveform.is_empty() {
@@ -92,7 +92,7 @@ impl DischargeProgram {
         }
     }
 
-    /// Create a standard H-mode discharge program for a given device.
+    /// Create a standard H-mode pulse program for a given device.
     /// Parameters based on real operating scenarios:
     ///   DIII-D: 1.2 MA, 5 MW NBI, 10s
     ///   ITER:  15 MA, 33 MW NBI + 20 MW ECH, 100s
@@ -134,7 +134,7 @@ impl DischargeProgram {
             _         => (0.10, 0.20, 0.80, 0.90),
         };
 
-        DischargeProgram {
+        PulseProgram {
             ip: vec![
                 (0.0, 0.0),
                 (duration * f_ramp0, ip_flat * 0.3),
@@ -210,7 +210,7 @@ impl DischargeProgram {
         }
     }
 
-    /// Create an L-mode only discharge (low power).
+    /// Create an L-mode only pulse (low power).
     pub fn lmode(device: &Device) -> Self {
         let ip_max = device.ip_max * 0.4;
         let bt = device.bt_max * 0.9;
@@ -222,7 +222,7 @@ impl DischargeProgram {
         };
         let ne_target = device.greenwald_density(ip_max) * 0.4;
 
-        DischargeProgram {
+        PulseProgram {
             ip: vec![
                 (0.0, 0.0),
                 (t_ramp_start, ip_max * 0.3),
@@ -280,7 +280,7 @@ impl DischargeProgram {
         };
         let ne_target = device.greenwald_density(ip_max) * 1.1; // Above Greenwald!
 
-        DischargeProgram {
+        PulseProgram {
             ip: vec![
                 (0.0, 0.0),
                 (t_ramp_start, ip_max * 0.3),
@@ -454,7 +454,7 @@ fn sample_lcfs(r0: f64, a: f64, kappa: f64, delta: f64, z0: f64, n: usize) -> Ve
 /// The main simulation engine.
 pub struct Simulation {
     pub device: Device,
-    pub program: DischargeProgram,
+    pub program: PulseProgram,
     pub time: f64,
     pub status: SimulationStatus,
 
@@ -473,7 +473,7 @@ pub struct Simulation {
     smoothed_f_greenwald: f64,
     smoothed_p_rad_frac: f64,
 
-    // Peak programmed Ip seen during this discharge — used to detect ramp-down
+    // Peak programmed Ip seen during this pulse — used to detect ramp-down
     peak_prog_ip: f64,
 
     // Smoothed l_i (resistive timescale ~ 200ms)
@@ -486,8 +486,8 @@ pub struct Simulation {
 }
 
 impl Simulation {
-    /// Create a new simulation for a given device and discharge program.
-    pub fn new(device: Device, program: DischargeProgram) -> Self {
+    /// Create a new simulation for a given device and pulse program.
+    pub fn new(device: Device, program: PulseProgram) -> Self {
         let equilibrium = CerfonEquilibrium::from_device(&device)
             .expect("Should be able to solve equilibrium for device");
 
@@ -552,7 +552,7 @@ impl Simulation {
 
         self.time += dt;
 
-        // Check for end of discharge
+        // Check for end of pulse
         if self.time >= self.program.duration {
             self.status = SimulationStatus::Complete;
             return self.snapshot();
@@ -990,18 +990,18 @@ mod tests {
     fn test_waveform_interpolation() {
         let waveform = vec![(0.0, 0.0), (1.0, 10.0), (2.0, 10.0), (3.0, 0.0)];
 
-        assert!((DischargeProgram::interpolate(&waveform, 0.5) - 5.0).abs() < 0.01);
-        assert!((DischargeProgram::interpolate(&waveform, 1.5) - 10.0).abs() < 0.01);
-        assert!((DischargeProgram::interpolate(&waveform, 2.5) - 5.0).abs() < 0.01);
+        assert!((PulseProgram::interpolate(&waveform, 0.5) - 5.0).abs() < 0.01);
+        assert!((PulseProgram::interpolate(&waveform, 1.5) - 10.0).abs() < 0.01);
+        assert!((PulseProgram::interpolate(&waveform, 2.5) - 5.0).abs() < 0.01);
         // Clamp at edges
-        assert!((DischargeProgram::interpolate(&waveform, -1.0) - 0.0).abs() < 0.01);
-        assert!((DischargeProgram::interpolate(&waveform, 5.0) - 0.0).abs() < 0.01);
+        assert!((PulseProgram::interpolate(&waveform, -1.0) - 0.0).abs() < 0.01);
+        assert!((PulseProgram::interpolate(&waveform, 5.0) - 0.0).abs() < 0.01);
     }
 
     #[test]
     fn test_standard_hmode_program() {
         let device = devices::diiid();
-        let prog = DischargeProgram::standard_hmode(&device);
+        let prog = PulseProgram::standard_hmode(&device);
 
         assert!(prog.duration > 0.0);
         assert!(!prog.ip.is_empty());
@@ -1011,14 +1011,14 @@ mod tests {
         assert!(prog.ip.last().unwrap().1 < 0.01);
 
         // Ip at flat top should be reasonable
-        let ip_flattop = DischargeProgram::interpolate(&prog.ip, 3.0);
+        let ip_flattop = PulseProgram::interpolate(&prog.ip, 3.0);
         assert!(ip_flattop > 0.5 && ip_flattop < device.ip_max);
     }
 
     #[test]
     fn test_simulation_creation() {
         let device = devices::diiid();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let sim = Simulation::new(device, program);
 
         assert_eq!(sim.time, 0.0);
@@ -1028,7 +1028,7 @@ mod tests {
     #[test]
     fn test_simulation_step() {
         let device = devices::diiid();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let mut sim = Simulation::new(device, program);
 
         sim.start();
@@ -1039,9 +1039,9 @@ mod tests {
     }
 
     #[test]
-    fn test_full_discharge_simulation() {
+    fn test_full_pulse_simulation() {
         let device = devices::diiid();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let duration = program.duration;
         let mut sim = Simulation::new(device, program);
 
@@ -1073,7 +1073,7 @@ mod tests {
     #[test]
     fn test_snapshot_has_equilibrium() {
         let device = devices::diiid();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let mut sim = Simulation::new(device, program);
 
         sim.start();
@@ -1085,7 +1085,7 @@ mod tests {
         }
 
         let snap = sim.step(dt);
-        // At 3s into a DIII-D discharge, should have flux surfaces
+        // At 3s into a DIII-D pulse, should have flux surfaces
         if snap.ip > 0.5 {
             assert!(
                 !snap.flux_surfaces.is_empty(),
@@ -1138,10 +1138,10 @@ mod tests {
     }
 
     #[test]
-    fn test_normal_discharge_no_wall_disruption() {
+    fn test_normal_pulse_no_wall_disruption() {
         // Standard H-mode with normal κ and δ should NOT trigger wall contact
         let device = devices::diiid();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let duration = program.duration;
         let mut sim = Simulation::new(device, program);
         sim.start();
@@ -1159,7 +1159,7 @@ mod tests {
                 break;
             }
         }
-        // With the default disruption RNG seed, the standard discharge may or may not
+        // With the default disruption RNG seed, the standard pulse may or may not
         // stochastically disrupt. But we can at least verify the simulation ran.
         // The key test is that extreme shapes DO disrupt (next test).
         let _ = wall_disrupted;
@@ -1168,7 +1168,7 @@ mod tests {
     #[test]
     fn test_centaur_peak_values() {
         let device = devices::centaur();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let duration = program.duration;
         let mut sim = Simulation::new(device, program);
         sim.start();
@@ -1206,7 +1206,7 @@ mod tests {
         // Note: τ_li ≈ 3.6s at Te ~ 3 keV, so we need to wait several
         // seconds after H-mode onset to see the effect.
         let device = devices::diiid();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let mut sim = Simulation::new(device, program);
         sim.start();
 
@@ -1256,7 +1256,7 @@ mod tests {
     fn test_extreme_kappa_causes_wall_disruption() {
         // Extreme elongation (κ=2.5) should push plasma into wall and disrupt
         let device = devices::diiid();
-        let mut program = DischargeProgram::standard_hmode(&device);
+        let mut program = PulseProgram::standard_hmode(&device);
 
         // Override kappa waveform to extreme value during flat-top
         program.kappa = vec![
@@ -1291,7 +1291,7 @@ mod tests {
     #[test]
     fn test_iter_hmode_transition() {
         let device = devices::iter();
-        let program = DischargeProgram::standard_hmode(&device);
+        let program = PulseProgram::standard_hmode(&device);
         let duration = program.duration;
         let bt_max = device.bt_max;
         let surface_area = device.surface_area;

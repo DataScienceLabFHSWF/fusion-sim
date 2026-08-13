@@ -161,7 +161,7 @@ export default function ControlRoom() {
       {/* Three-column grid rather than justify-between: the side columns take
           an equal share of the free space, so the playback controls stay
           centred on the page even as the side content changes width (DD/DT
-          toggle appearing per device, "(done)" suffix at end of discharge). */}
+          toggle appearing per device, "(done)" suffix at end of pulse). */}
       <div className="relative z-50 grid grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
         {/* Device, Scenario, Fuel selectors */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start">

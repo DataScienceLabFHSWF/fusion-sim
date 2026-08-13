@@ -27,7 +27,7 @@ const MARGIN_BOTTOM = 2
 
 interface Props {
   history: TracePoint[]
-  duration: number // total discharge duration
+  duration: number // total pulse duration
 }
 
 export default function TimeTraces({ history, duration }: Props) {

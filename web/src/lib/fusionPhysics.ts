@@ -280,11 +280,11 @@ export interface DivertorState {
  *
  * where C_th is the thermal capacitance of the armor tile (ρ × c_p × L),
  * q_applied is the incident heat flux, q_cooling is active water cooling
- * (ITER only) or inter-shot water cooling (JET/DIII-D ≈ 0 during pulse),
+ * (ITER only) or inter-pulse water cooling (JET/DIII-D ≈ 0 during pulse),
  * and q_radiation is Stefan-Boltzmann radiative cooling from the surface.
  *
  * This gives realistic thermal evolution: temperature rises through the
- * discharge, spikes during ELMs, and recovers between ELMs.
+ * pulse, spikes during ELMs, and recovers between ELMs.
  */
 export class DivertorThermalModel {
   t_surface: number   // Current surface temperature (°C)
@@ -310,7 +310,7 @@ export class DivertorThermalModel {
       this.rho = 1800        // graphite density (kg/m³)
       this.cp = 1200         // effective average specific heat (J/kg/K)
       this.armor_L = 0.025   // 25 mm effective tile + substrate thickness
-      this.T_coolant = 25    // room temp water (between shots only)
+      this.T_coolant = 25    // room temp water (between pulses only)
       this.h_cool = 0        // no active cooling during pulse
     } else if (deviceId === 'iter') {
       // ITER tungsten monoblocks — actively water-cooled.
@@ -358,7 +358,7 @@ export class DivertorThermalModel {
     }
   }
 
-  /** Reset to ambient when starting a new discharge or switching device */
+  /** Reset to ambient when starting a new pulse or switching device */
   reset(): void {
     this.t_surface = this.ambientTemp(this.deviceId)
   }

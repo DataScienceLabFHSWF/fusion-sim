@@ -4,7 +4,7 @@ import {
   getPreset,
   getDevice,
   type PresetId,
-  type DischargeProgram,
+  type PulseProgram,
   type WaveformPoint,
 } from '../lib/wasm'
 
@@ -14,7 +14,7 @@ interface ScalarParam {
   key: string
   label: string
   unit: string
-  waveformKey: keyof DischargeProgram
+  waveformKey: keyof PulseProgram
   min: number
   max: number
   step: number
@@ -78,7 +78,7 @@ function getFlatTopValue(waveform: WaveformPoint[]): number {
 function scaleWaveform(waveform: WaveformPoint[], newValue: number): WaveformPoint[] {
   const oldMax = getFlatTopValue(waveform)
   if (oldMax <= 0) {
-    // Base waveform is all zeros — create a ramp during the mid-discharge
+    // Base waveform is all zeros — create a ramp during the mid-pulse
     // phase (well after H-mode transition, before rampdown) so that
     // impurity seeding doesn't radiate away a cold startup plasma.
     const tEnd = waveform.length > 0 ? waveform[waveform.length - 1][0] : 10
@@ -184,7 +184,7 @@ export default function ShotPlanner({
   const handleRun = useCallback(() => {
     if (!baseProgram) return
 
-    const modified: DischargeProgram = { ...baseProgram }
+    const modified: PulseProgram = { ...baseProgram }
 
     // Apply waveform overrides
     for (const param of SCALAR_PARAMS) {
@@ -205,7 +205,7 @@ export default function ShotPlanner({
     if (durationOverride !== null && durationOverride !== baseProgram.duration) {
       const timeScale = durationOverride / baseProgram.duration
       modified.duration = durationOverride
-      const waveformKeys: (keyof DischargeProgram)[] = ['ip', 'bt', 'ne_target', 'p_nbi', 'p_ech', 'p_ich', 'kappa', 'delta', 'd2_puff', 'neon_puff']
+      const waveformKeys: (keyof PulseProgram)[] = ['ip', 'bt', 'ne_target', 'p_nbi', 'p_ech', 'p_ich', 'kappa', 'delta', 'd2_puff', 'neon_puff']
       for (const k of waveformKeys) {
         const wf = modified[k] as WaveformPoint[]
         ;(modified as unknown as Record<string, unknown>)[k] = wf.map(([t, v]) => [t * timeScale, v] as WaveformPoint)
@@ -245,7 +245,7 @@ export default function ShotPlanner({
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-800">
         <div>
-          <h2 className="panel-title">Shot Planner</h2>
+          <h2 className="panel-title">Pulse Planner</h2>
           <p className="text-[9px] text-gray-600 mt-0.5">Click any trace to draw a custom waveform</p>
         </div>
         <button
@@ -421,7 +421,7 @@ export default function ShotPlanner({
           className="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-sm font-bold
                      transition-colors cursor-pointer"
         >
-          ▶ Run Discharge
+          ▶ Run Pulse
         </button>
       </div>
 
