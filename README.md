@@ -16,7 +16,7 @@ for exploring tokamak plasma behavior.
   equilibrium, tanh-pedestal profiles, ELM dynamics, and disruption modeling
 - **Interactive control room:** 2D equilibrium cross-section, 19-channel time
   trace viewer, plasma parameter dashboard, and 3D tokamak port view
-- **Shot Planner:** Edit pulse parameters (Ip, heating power, density,
+- **Pulse Planner:** Edit pulse parameters (Ip, heating power, density,
   shaping) and run custom scenarios
 - **Fusion diagnostics:** Computed fusion power/Q, neutron rate, divertor heat
   flux with surface temperature modeling
@@ -160,7 +160,7 @@ For detailed documentation of every module, function, and component, see
 │  │ • Transport  │    │    ├─ StatusPanel       │  │
 │  │ • Profiles   │    │    ├─ UnifiedTracePanel │  │
 │  │ • Disruption │    │    ├─ PortView (3D)     │  │
-│  │ • Contours   │    │    └─ ShotPlanner       │  │
+│  │ • Contours   │    │    └─ PulsePlanner      │  │
 │  └──────────────┘    └────────────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```

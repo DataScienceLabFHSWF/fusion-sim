@@ -9,7 +9,7 @@
 //
 // DEVICE_POWER_SCALE remains as art direction for the *absolute* scale per
 // device (DIII-D barely perceptible → ITER dazzling); the physics modulates
-// brightness *within* a shot: ramp-up, ELM transients, detachment, ramp-down.
+// brightness *within* a pulse: ramp-up, ELM transients, detachment, ramp-down.
 
 import type { Snapshot } from '../../lib/types'
 import { computeDivertorHeatFlux, DivertorThermalModel } from '../../lib/fusionPhysics'

@@ -127,7 +127,7 @@ function WaveformSparkline({ waveform, color }: { waveform: WaveformPoint[]; col
 
 /* ─── Component ─────────────────────────────────────────── */
 
-export default function ShotPlanner({
+export default function PulsePlanner({
   deviceId,
   onRun,
   onClose,

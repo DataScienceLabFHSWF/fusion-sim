@@ -5,7 +5,7 @@ import { getDevices, type PresetId } from '../lib/wasm'
 import EquilibriumCanvas from '../components/EquilibriumCanvas'
 import UnifiedTracePanel from '../components/UnifiedTracePanel'
 import StatusPanel from '../components/StatusPanel'
-import ShotPlanner from '../components/ShotPlanner'
+import PulsePlanner from '../components/PulsePlanner'
 import PortView from '../components/portview'
 import SettingsDropdown from '../components/SettingsDropdown'
 import TutorialOverlay from '../components/TutorialOverlay'
@@ -216,7 +216,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Playback controls — fixed widths on the buttons whose label changes
-            so the row never reflows as the shot state changes. */}
+            so the row never reflows as the pulse state changes. */}
         <div className="flex items-center gap-1 sm:gap-1.5 justify-self-center">
           {!running ? (
             <button
@@ -355,7 +355,7 @@ export default function ControlRoom() {
 
       {/* ─── Pulse Planner drawer ─── */}
       {showPlanner && (
-        <ShotPlanner
+        <PulsePlanner
           deviceId={activeDevice}
           onRun={handleRunProgram}
           onClose={() => setShowPlanner(false)}

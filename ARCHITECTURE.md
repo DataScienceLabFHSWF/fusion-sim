@@ -35,7 +35,7 @@ covers every directory, file, module, and major function in the project.
    - [EquilibriumCanvas — 2D Cross-Section](#equilibriumcanvas--2d-cross-section)
    - [StatusPanel — Parameter Dashboard](#statuspanel--parameter-dashboard)
    - [UnifiedTracePanel — Time Traces](#unifiedtracepanel--time-traces)
-   - [ShotPlanner — Pulse Editor](#shotplanner--pulse-editor)
+   - [PulsePlanner — Waveform Editor](#pulseplanner--waveform-editor)
    - [ProfilePanel — Radial Profiles](#profilepanel--radial-profiles)
    - [PortView (3D) — Tokamak Visualization](#portview-3d--tokamak-visualization)
    - [Supporting Components](#supporting-components)
@@ -118,7 +118,7 @@ fusion-sim/
         │   ├── EquilibriumCanvas.tsx  # 2D poloidal cross-section (Canvas API)
         │   ├── StatusPanel.tsx        # Parameter dashboard + sub-panels
         │   ├── UnifiedTracePanel.tsx  # Time trace viewer (19 channels)
-        │   ├── ShotPlanner.tsx        # Pulse parameter editor
+        │   ├── PulsePlanner.tsx       # Pulse parameter editor
         │   ├── ProfilePanel.tsx       # Te/ne/pressure profile viewer
         │   ├── DisruptionGauge.tsx    # Vertical disruption risk gauge
         │   ├── InfoPopup.tsx          # Reusable info popup
@@ -553,7 +553,7 @@ Three built-in presets per device, constructed by `PulseProgram` factory methods
 |--------|-------------|
 | `hmode_preset()` | Standard H-mode: Ip ramp → NBI → L-H transition → H-mode flat-top → rampdown |
 | `lmode_preset()` | L-mode: Ohmic + modest NBI, stays in L-mode confinement |
-| `density_limit_preset()` | Over-fuelled shot pushing past the Greenwald limit |
+| `density_limit_preset()` | Over-fuelled pulse pushing past the Greenwald limit |
 
 Presets scale their waveforms to each device's engineering limits (Ip_max, Bt_max, etc.).
 
@@ -706,7 +706,7 @@ Tracks: `snapshot` (latest), `displaySnapshot` (current display — live or scru
 | `pause()` | Stop animation loop |
 | `reset()` | Recreate SimHandle from current preset |
 | `switchPreset(device, preset)` | Switch device and/or preset |
-| `runProgram(device, json)` | Run custom program from Shot Planner |
+| `runProgram(device, json)` | Run custom program from Pulse Planner |
 | `setScrubTime(t \| null)` | Scrub to historical time (or null to return to live) |
 | `setSpeed(multiplier)` | Adjust simulation speed (0.5x to 2x) |
 
@@ -878,10 +878,10 @@ Features:
 
 ---
 
-### ShotPlanner — Pulse Editor
+### PulsePlanner — Waveform Editor
 
 ```
-web/src/components/ShotPlanner.tsx (394 lines)
+web/src/components/PulsePlanner.tsx (394 lines)
 ```
 
 A **slide-out drawer** for editing pulse parameters before or during a run.
@@ -998,12 +998,12 @@ button navigates to ControlRoom.
 
 The main simulation page. Features:
 - **Top bar:** Device selector, preset selector (button group), playback controls
-  (Start/Pause/Reset), speed selector (0.5x-2x), Shot Planner toggle
+  (Start/Pause/Reset), speed selector (0.5x-2x), Pulse Planner toggle
 - **Main grid:** 2x3 CSS grid with EquilibriumCanvas (top-left), UnifiedTracePanel
   (top-right, spanning 2 columns), StatusPanel (bottom-left, spanning 2 columns),
   PortView (bottom-right)
 - **Progress bar:** Bottom bar showing simulation time progress
-- **Shot Planner:** Slide-out drawer (fixed right panel, z-50)
+- **Pulse Planner:** Slide-out drawer (fixed right panel, z-50)
 - **Tutorial:** Optional overlay triggered by URL param or settings
 
 ### Bibliography
