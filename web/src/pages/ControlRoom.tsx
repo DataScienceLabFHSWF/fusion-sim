@@ -49,7 +49,7 @@ export default function ControlRoom() {
   const [showPlanner, setShowPlanner] = useState(false)
   const [activeSpeed, setActiveSpeed] = useState(1.0)
 
-  // Persistent Shot Planner state — survives open/close of the drawer
+  // Persistent Pulse Planner state — survives open/close of the drawer
   const [plannerOverrides, setPlannerOverrides] = useState<Record<string, number | import('../lib/wasm').WaveformPoint[] | null>>({})
   const [plannerDuration, setPlannerDuration] = useState<number | null>(null)
   const [plannerPreset, setPlannerPreset] = useState<PresetId>(routePreset)
@@ -93,7 +93,7 @@ export default function ControlRoom() {
   })()
   const progress = duration > 0 ? (time / duration) * 100 : 0
 
-  // Whether this discharge programs any ICH power — used to reserve the P_ICH
+  // Whether this pulse programs any ICH power — used to reserve the P_ICH
   // power-balance row from the start so it doesn't pop in and shift the layout.
   const usesIch = useMemo(() => {
     try {
@@ -158,9 +158,13 @@ export default function ControlRoom() {
   return (
     <div className="page-enter h-screen flex flex-col bg-[#0a0e17] overflow-hidden">
       {/* ─── Top bar ─── */}
-      <div className="relative z-50 flex flex-wrap items-center justify-between px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
+      {/* Three-column grid rather than justify-between: the side columns take
+          an equal share of the free space, so the playback controls stay
+          centred on the page even as the side content changes width (DD/DT
+          toggle appearing per device, "(done)" suffix at end of discharge). */}
+      <div className="relative z-50 grid grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-3 py-1 sm:py-1.5 border-b border-gray-800 gap-1 sm:gap-2">
         {/* Device, Scenario, Fuel selectors */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-self-start">
           {/* Device selector */}
           <select
             value={activeDevice}
@@ -211,13 +215,14 @@ export default function ControlRoom() {
           )}
         </div>
 
-        {/* Playback controls */}
-        <div className="flex items-center gap-1 sm:gap-1.5">
+        {/* Playback controls — fixed widths on the buttons whose label changes
+            so the row never reflows as the shot state changes. */}
+        <div className="flex items-center gap-1 sm:gap-1.5 justify-self-center">
           {!running ? (
             <button
               onClick={controls.start}
               className="px-2 sm:px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-[11px] sm:text-xs font-semibold
-                         transition-colors cursor-pointer flex items-center gap-1"
+                         transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >
               ▶ Start
             </button>
@@ -225,20 +230,21 @@ export default function ControlRoom() {
             <button
               onClick={controls.pause}
               className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded text-[11px] sm:text-xs font-semibold
-                         transition-colors cursor-pointer flex items-center gap-1"
+                         transition-colors cursor-pointer flex items-center justify-center gap-1 min-w-[4.5rem] sm:min-w-[5rem]"
             >
               ⏸ Pause
             </button>
           )}
-          {!(running && hasCustomProgram) && (
-            <button
-              onClick={controls.reset}
-              className="px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[11px] sm:text-xs font-semibold
-                         transition-colors cursor-pointer"
-            >
-              {hasCustomProgram ? '↺ Reset' : '↺ Reset'}
-            </button>
-          )}
+          {/* Kept in the layout (invisible) while hidden, so removing it does
+              not shift the surrounding controls. */}
+          <button
+            onClick={controls.reset}
+            aria-hidden={running && hasCustomProgram}
+            className={`px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[11px] sm:text-xs font-semibold
+                       transition-colors cursor-pointer ${running && hasCustomProgram ? 'invisible' : ''}`}
+          >
+            ↺ Reset
+          </button>
 
           {/* Speed selector */}
           <div className="flex rounded overflow-hidden border border-gray-700">
@@ -262,7 +268,7 @@ export default function ControlRoom() {
           <button
             onClick={() => setShowPlanner(!showPlanner)}
             className="px-1.5 sm:px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] sm:text-[11px] font-semibold
-                       transition-colors cursor-pointer flex items-center gap-1"
+                       transition-colors cursor-pointer flex items-center justify-center gap-1 sm:min-w-[4.25rem]"
           >
             {showPlanner ? (
               '✕'
@@ -276,7 +282,7 @@ export default function ControlRoom() {
         </div>
 
         {/* Time readout + Settings */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 justify-self-end">
           <div className="font-mono text-[10px] sm:text-xs text-gray-400 tabular-nums whitespace-nowrap">
             t={time.toFixed(3)}s / {duration.toFixed(1)}s
             {finished && (
@@ -347,7 +353,7 @@ export default function ControlRoom() {
         />
       </div>
 
-      {/* ─── Shot Planner drawer ─── */}
+      {/* ─── Pulse Planner drawer ─── */}
       {showPlanner && (
         <ShotPlanner
           deviceId={activeDevice}
