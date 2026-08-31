@@ -42,9 +42,32 @@ const FRESNEL_EXPONENT = 2.0
 // ~30-60 overlapping fragments → bright misty limb + bloom.
 const SEP_BASE_INTENSITY = 0.10
 
-// ELM flash parameters
-const ELM_FLASH_MULT = 5.0
-const ELM_WHITE_SHIFT = 0.3
+// ── ELM event parameters ──
+// An ELM is an *event*, not a state: the elm_active rising edge triggers an
+// envelope (fast attack, exponential decay) localized to the outboard
+// midplane where ballooning modes erupt. The envelope drives two things on
+// the existing translucent separatrix shells: a broad pedestal-emission
+// brightening (the "thicker glowing edge") and a *continuous* helical stripe
+// pattern painted per-vertex (field-aligned "barbershop-pole" filaments,
+// pitch set by q95). No discrete sprites — continuous by construction.
+// Timescales are stretched ~100× from the real sub-millisecond crash.
+const ELM_PED_GAIN = 2.2       // broad pedestal-shell brightening at weight 1
+const ELM_FIL_GAIN = 6.0       // extra brightness inside the helical filaments
+const ELM_WHITE_SHIFT = 0.35   // color shift toward white (strongest in filaments)
+// The envelope tracks the sim's elm_active flag directly so the visual stays
+// in sync with the Dα trace: it rises fast while the ELM is on and collapses
+// promptly when it ends, leaving nothing visible between ELMs.
+const ELM_ATTACK = 0.02        // seconds to full brightness while active
+const ELM_DECAY_TAU = 0.04     // brightness e-folding once elm_active clears
+const ELM_TAIL = 0.15          // envelope forced to zero this long after turn-off
+const ELM_STRIPE_COUNT = 11    // filaments around the poloidal cross-section
+                               // (integer → continuous across the inboard seam)
+// Edge toroidal rotation is tens of km/s — the filament pattern completes many
+// turns per frame, so at display rate it reads as rapid flashes at different
+// swirl phases rather than a smoothly rotating pattern. That temporal aliasing
+// is the intended look (it is what a limited-frame-rate camera actually sees).
+const ELM_STRIPE_SPEED = 2200.0  // rad/s
+const ELM_FIL_WHITE = 0.65     // filament share of the white shift
 
 /** GLSL-style smoothstep: Hermite interpolation clamped to [0,1]. */
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -68,11 +91,12 @@ export interface PlasmaGroup {
   sepMaterial: THREE.MeshBasicMaterial
   legMaterial: THREE.MeshBasicMaterial
   update: (params: PlasmaUpdateParams) => void
+  /** Animate time-based effects (ELM filaments) at display rate. */
+  tick: (time: number) => void
 }
 
 export interface PlasmaUpdateParams {
   separatrix: Contour
-  fluxSurfaces: Contour[]
   axisR: number
   axisZ: number
   xpointR: number
@@ -82,9 +106,22 @@ export interface PlasmaUpdateParams {
   inHmode: boolean
   elmActive: boolean
   te0: number
-  betaN: number
+  /** Edge safety factor — sets the ELM filament field-line pitch */
+  q95: number
+  /** Energy lost by the last ELM crash (MJ) — scales the eruption */
+  elmEnergyLoss?: number
+  /** Greenwald density fraction — denser edge recycles/glows brighter */
+  fGreenwald: number
+  /** Core impurity fraction (carbon) — subtle blue-green tinge */
+  impurityFraction: number
+  /** Neon seeding rate (10²⁰/s) — shifts the edge glow orange-red */
+  neonPuff: number
+  /** Radiated power fraction p_rad/p_loss — a radiative edge emits more */
+  pRadFrac: number
   opacity: number
   limiterPts: [number, number][]
+  /** Scene clock (seconds) for event envelopes */
+  time: number
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -298,8 +335,10 @@ function clipOutboardBridge(
 }
 
 /**
- * Rebuild separatrix positions and per-vertex baseBrightness into
- * pre-allocated buffers.  Returns the active vertex/index counts.
+ * Rebuild separatrix positions, per-vertex baseBrightness, and per-vertex
+ * ELM weight (outboard-midplane localization) into pre-allocated buffers.
+ * Returns the active vertex/index counts plus the processed boundary contour
+ * and its normals (consumed by the ELM filament system).
  */
 function rebuildSepGeometry(
   cfg: PortConfig,
@@ -307,11 +346,22 @@ function rebuildSepGeometry(
   camPos: THREE.Vector3,
   positions: Float32Array,
   baseBright: Float32Array,
+  elmWeight: Float32Array,
+  vertPhi: Float32Array,
+  vertPolAngle: Float32Array,
   indices: Uint32Array,
-  xpR = 0, xpZ = 0, xpUR = 0, xpUZ = 0, axisR = 0,
-): { vertCount: number; idxCount: number } {
+  xpR = 0, xpZ = 0, xpUR = 0, xpUZ = 0, axisR = 0, axisZ = 0,
+  inHmode = false,
+): { vertCount: number; idxCount: number; contour: [number, number][]; normals: [number, number][] } {
+  const empty = { vertCount: 0, idxCount: 0, contour: [] as [number, number][], normals: [] as [number, number][] }
+  // H-mode pedestal: the edge steepens into a transport barrier — tighten
+  // the shell stack and sharpen the limb so the boundary reads as a crisp
+  // skin; L-mode keeps the broad fuzzy profile. (inHmode is part of the
+  // contour fingerprint, so the L-H transition triggers this rebuild.)
+  const shellScale = inHmode ? 0.65 : 1.0
+  const fresnelExp = inHmode ? 2.6 : FRESNEL_EXPONENT
   const chains = splitChains(sepPts)
-  if (chains.length === 0) return { vertCount: 0, idxCount: 0 }
+  if (chains.length === 0) return empty
 
   // For negative triangularity: clip the outboard bridge from the main chain
   const clipped = clipOutboardBridge(chains[0], xpR, xpZ, xpUR, xpUZ, axisR)
@@ -321,7 +371,7 @@ function rebuildSepGeometry(
   const sampled = subsample(densified, SEP_CONTOUR_PTS)
   const mainLoop = smoothContour(sampled, 3)
   const nPts = mainLoop.length
-  if (nPts < 4) return { vertCount: 0, idxCount: 0 }
+  if (nPts < 4) return empty
 
   // Check if the main loop is closed (first ≈ last point)
   let avgSpacing = 0
@@ -370,7 +420,7 @@ function rebuildSepGeometry(
 
   for (let sh = 0; sh < N_SHELLS; sh++) {
     const shellBase = sh * nSlices * nPts
-    const offset = SHELL_OFFSETS[sh]
+    const offset = SHELL_OFFSETS[sh] * shellScale
     // Golden-ratio-based stagger so no two shells align
     const phiStagger = phiStep * ((sh * 0.618) % 1.0)
 
@@ -418,11 +468,23 @@ function rebuildSepGeometry(
         const NdotV = Math.abs((nx * vx + ny * vy + nz * vz) / vLen)
 
         // Fresnel: transparent face-on (NdotV≈1), bright edge-on (NdotV≈0)
-        let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), FRESNEL_EXPONENT)
+        let fresnel = Math.pow(Math.max(0, 1.0 - NdotV), fresnelExp)
         fresnel *= smoothstep(0.08, 0.35, fresnel)
 
         // Cache geometry-dependent brightness (without opacity/ELM which change per-frame)
         baseBright[vi] = SEP_BASE_INTENSITY * fresnel * dFade
+
+        // ELM localization weight: strongest at the outboard midplane
+        // (ballooning-unstable side), fading toward the inboard/top/bottom.
+        const outb = Math.max(0, Math.min(1, (R - axisR) / Math.max(rMax - axisR, 0.2)))
+        const zg = Math.exp(-((Z - axisZ) * (Z - axisZ)) / 0.72)  // σ ≈ 0.6 m
+        elmWeight[vi] = 0.25 + 0.75 * outb * zg
+
+        // Toroidal + poloidal parametrization for the ELM helical stripes.
+        // Poloidal angle is measured around the magnetic axis; with an integer
+        // stripe count it stays continuous across the inboard branch cut.
+        vertPhi[vi] = phi
+        vertPolAngle[vi] = Math.atan2(Z - axisZ, R - axisR)
 
         vi++
       }
@@ -446,7 +508,7 @@ function rebuildSepGeometry(
     }
   }
 
-  return { vertCount: vi, idxCount: ii }
+  return { vertCount: vi, idxCount: ii, contour: mainLoop, normals: cNormals }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -712,7 +774,6 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     side: THREE.DoubleSide,
   })
 
-  const baseColor = { r: 0.85, g: 0.20, b: 0.55 }   // fuchsia — ionized deuterium
   const legColor = { r: 0.90, g: 0.30, b: 0.60 }
 
   // Camera position (constant for a given device config)
@@ -726,6 +787,9 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
   const sepPositions = new Float32Array(SEP_MAX_VERTS * 3)
   const sepColors = new Float32Array(SEP_MAX_VERTS * 3)
   const sepBaseBright = new Float32Array(SEP_MAX_VERTS)
+  const sepElmWeight = new Float32Array(SEP_MAX_VERTS)
+  const sepVertPhi = new Float32Array(SEP_MAX_VERTS)
+  const sepVertPolAngle = new Float32Array(SEP_MAX_VERTS)
   const sepIdxBuf = new Uint32Array(SEP_MAX_INDICES)
 
   const sepGeom = new THREE.BufferGeometry()
@@ -774,28 +838,136 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
 
   let legVertCount = 0
   let legIdxCount = 0
-  let legFP = ''
 
-  // ═══ UPDATE (hot path — called every frame) ═══
+  // ═══ ELM EVENT ENVELOPE ═══
+  // Driven directly by the sim's elm_active flag so the visual is in sync
+  // with the Dα trace rather than free-running on its own timer.
+  let elmActiveNow = false
+  let elmOnT0 = -Infinity   // animation-clock time elm_active went true
+  let elmOffT0 = -Infinity  // ... and when it went false
+  let elmOffLevel = 0       // envelope value captured at turn-off
+  let elmAmp = 0            // per-event amplitude from elm_energy_loss
+  let lastParams: PlasmaUpdateParams | null = null
+
+  /** Fast rise while the ELM is on, prompt collapse once it clears. */
+  const elmEnvelope = (time: number): number => {
+    if (elmActiveNow) {
+      return Math.min(Math.max(time - elmOnT0, 0) / ELM_ATTACK, 1)
+    }
+    const dt = time - elmOffT0
+    if (dt < 0 || dt > ELM_TAIL) return 0
+    return elmOffLevel * Math.exp(-dt / ELM_DECAY_TAU)
+  }
+
+  // ═══ COLOR APPLICATION ═══
+  // Per-vertex color write for the separatrix shells and divertor legs.
+  // Split out from update() so it can also run every frame from tick()
+  // while an ELM envelope is alive, animating the barbershop stripes at
+  // display rate.  Cheap (a multiply, plus one cos during ELMs) per vertex.
+  const applyColors = (time: number) => {
+    const p = lastParams
+    if (!p || sepVertCount === 0) { sepMesh.visible = false; legMesh.visible = false; return }
+
+    // Plasma color from temperature — fuchsia (ionized deuterium) base
+    const tempFrac = Math.min(p.te0 / 12, 1)
+    let cr = 0.75 + tempFrac * 0.15
+    let cg = 0.15 + tempFrac * 0.10
+    let cb = 0.45 + tempFrac * 0.15
+    // Impurity tints: carbon pulls faintly blue-green; neon seeding pulls
+    // the edge glow orange-red (its strongest visible lines are red).
+    const imp = Math.min(Math.max(p.impurityFraction, 0) * 20, 1)
+    const neon = Math.min(Math.max(p.neonPuff, 0) / 2, 1)
+    cr += neon * 0.08 - imp * 0.04
+    cg += imp * 0.06
+    cb -= neon * 0.12 - imp * 0.02
+    // Edge emission scales with density (recycling light) and radiated
+    // power fraction (a radiative edge is a brighter edge).
+    const fGW = Math.min(Math.max(p.fGreenwald, 0), 1.2)
+    const emission = (0.6 + 0.55 * fGW) * (1 + Math.min(Math.max(p.pRadFrac, 0), 1) * 0.4)
+    const scale = p.opacity * emission
+    const elmEnv = elmEnvelope(time) * elmAmp
+
+    // ── Separatrix shells ──
+    if (elmEnv > 0.001) {
+      // Field-aligned helical stripes: bright filaments at constant
+      // (N·θ − N/q·φ), winding tighter at low q95, slowly rotating. The
+      // broad pedestal term brightens the whole edge; the stripe term adds
+      // the barbershop filaments on top, localized to the outboard midplane.
+      const pitch = Math.min(Math.max(Math.abs(p.q95), 2), 8)
+      const kPhi = ELM_STRIPE_COUNT / pitch
+      const drift = time * ELM_STRIPE_SPEED
+      for (let i = 0; i < sepVertCount; i++) {
+        const w = sepElmWeight[i] * elmEnv
+        const phase = ELM_STRIPE_COUNT * sepVertPolAngle[i] - kPhi * sepVertPhi[i] - drift
+        let s = Math.cos(phase)
+        s = s > 0 ? s * s * s : 0   // sharpen to narrow bright filaments
+        const b = sepBaseBright[i] * scale * (1 + ELM_PED_GAIN * w + ELM_FIL_GAIN * s * w)
+        const shift = ELM_WHITE_SHIFT * w * ((1 - ELM_FIL_WHITE) + ELM_FIL_WHITE * s)
+        sepColors[i * 3] = (cr + shift) * b
+        sepColors[i * 3 + 1] = (cg + shift) * b
+        sepColors[i * 3 + 2] = (cb + shift) * b
+      }
+    } else {
+      for (let i = 0; i < sepVertCount; i++) {
+        const b = sepBaseBright[i] * scale
+        sepColors[i * 3] = cr * b
+        sepColors[i * 3 + 1] = cg * b
+        sepColors[i * 3 + 2] = cb * b
+      }
+    }
+    sepColAttr.needsUpdate = true
+    sepGeom.setDrawRange(0, sepIdxCount)
+    sepMesh.visible = true
+
+    // ── Divertor legs ──
+    // The particle burst arrives at the divertor: uniform brightening along
+    // the legs (no stripes), slightly weaker than the midplane flash.
+    if (legVertCount > 0) {
+      const legEnv = elmEnv * 0.7
+      const lr = legColor.r + ELM_WHITE_SHIFT * legEnv
+      const lg = legColor.g + ELM_WHITE_SHIFT * legEnv
+      const lb = legColor.b + ELM_WHITE_SHIFT * legEnv
+      const lScale = scale * (1 + ELM_PED_GAIN * legEnv)
+      for (let i = 0; i < legVertCount; i++) {
+        const b = legBaseBright[i] * lScale
+        legColors[i * 3] = lr * b
+        legColors[i * 3 + 1] = lg * b
+        legColors[i * 3 + 2] = lb * b
+      }
+      legColAttr.needsUpdate = true
+      legGeom.setDrawRange(0, legIdxCount)
+      legMesh.visible = true
+    } else {
+      legMesh.visible = false
+    }
+  }
+
+  // ═══ UPDATE (called on each sim snapshot) ═══
   const update = (params: PlasmaUpdateParams) => {
     const sepPts = params.separatrix.points
     if (sepPts.length < 4) {
       sepMesh.visible = false
       legMesh.visible = false
+      lastParams = null
       return
     }
 
-    // Plasma color from temperature — fuchsia (ionized deuterium) base
-    const tempFrac = Math.min(params.te0 / 12, 1)
-    baseColor.r = 0.75 + tempFrac * 0.15   // 0.75 → 0.90
-    baseColor.g = 0.15 + tempFrac * 0.10   // 0.15 → 0.25
-    baseColor.b = 0.45 + tempFrac * 0.15   // 0.45 → 0.60
+    // ── ELM event: follow the elm_active flag's edges ──
+    if (params.elmActive && !elmActiveNow) {
+      elmOnT0 = params.time
+      // Scale the eruption with the crash energy (MJ): DIII-D-size ELMs
+      // (~30 kJ) ≈ 1.0, JET/ITER-size crashes saturate at 1.6.
+      const loss = Math.max(params.elmEnergyLoss ?? 0, 0)
+      elmAmp = Math.min(0.6 + Math.sqrt(loss) * 2.5, 1.6)
+    } else if (!params.elmActive && elmActiveNow) {
+      // Capture where the envelope had got to, and decay from there
+      elmOffLevel = Math.min(Math.max(params.time - elmOnT0, 0) / ELM_ATTACK, 1)
+      elmOffT0 = params.time
+    }
+    elmActiveNow = params.elmActive
+    lastParams = params
 
-    const elmMult = params.elmActive ? ELM_FLASH_MULT : 1.0
-    const elmW = params.elmActive ? ELM_WHITE_SHIFT : 0.0
-    const opacity = params.opacity
-
-    // ── Separatrix ──
+    // ── Separatrix geometry (rebuilt only when the contour changes) ──
     const newFP = contourFingerprint(
       sepPts, params.inHmode,
       params.xpointR, params.xpointZ,
@@ -803,78 +975,40 @@ export function createPlasmaGroup(cfg: PortConfig): PlasmaGroup {
     )
 
     if (newFP !== sepFP) {
-      // FULL REBUILD: contour geometry changed
       const result = rebuildSepGeometry(
         cfg, sepPts, camPos,
-        sepPositions, sepBaseBright, sepIdxBuf,
-        params.xpointR, params.xpointZ, params.xpointUpperR, params.xpointUpperZ, params.axisR,
+        sepPositions, sepBaseBright, sepElmWeight, sepVertPhi, sepVertPolAngle, sepIdxBuf,
+        params.xpointR, params.xpointZ, params.xpointUpperR, params.xpointUpperZ,
+        params.axisR, params.axisZ, params.inHmode,
       )
       sepVertCount = result.vertCount
       sepIdxCount = result.idxCount
       sepFP = newFP
       sepPosAttr.needsUpdate = true
       sepIdxAttr.needsUpdate = true
-    }
 
-    // COLOR UPDATE (every frame — cheap per-vertex multiply)
-    if (sepVertCount > 0) {
-      const cr = (baseColor.r + elmW)
-      const cg = (baseColor.g + elmW)
-      const cb = (baseColor.b + elmW)
-      const scale = opacity * elmMult
-
-      for (let i = 0; i < sepVertCount; i++) {
-        const b = sepBaseBright[i] * scale
-        sepColors[i * 3] = cr * b
-        sepColors[i * 3 + 1] = cg * b
-        sepColors[i * 3 + 2] = cb * b
-      }
-      sepColAttr.needsUpdate = true
-      sepGeom.setDrawRange(0, sepIdxCount)
-      sepMesh.visible = true
-    } else {
-      sepMesh.visible = false
-    }
-
-    // ── Divertor legs ──
-    // Show legs whenever separatrix is visible (not gated on H-mode)
-    // to prevent legs flashing independently during beta_N oscillations.
-    if (sepVertCount > 0) {
       // Legs share the same fingerprint (if contour changed, legs change too)
-      if (newFP !== legFP) {
-        const result = rebuildLegGeometry(
-          cfg, params, camPos,
-          legPositions, legBaseBright, legIdxBuf,
-        )
-        legVertCount = result.vertCount
-        legIdxCount = result.idxCount
-        legFP = newFP
-        legPosAttr.needsUpdate = true
-        legIdxAttr.needsUpdate = true
-      }
-
-      if (legVertCount > 0) {
-        // Apply ELM flash to leg colors (same as separatrix)
-        const lr = (legColor.r + elmW)
-        const lg = (legColor.g + elmW)
-        const lb = (legColor.b + elmW)
-        const lScale = opacity * elmMult
-        for (let i = 0; i < legVertCount; i++) {
-          const b = legBaseBright[i] * lScale
-          legColors[i * 3] = lr * b
-          legColors[i * 3 + 1] = lg * b
-          legColors[i * 3 + 2] = lb * b
-        }
-        legColAttr.needsUpdate = true
-        legGeom.setDrawRange(0, legIdxCount)
-        legMesh.visible = true
-      } else {
-        legMesh.visible = false
-      }
-    } else {
-      legMesh.visible = false
+      const legResult = rebuildLegGeometry(
+        cfg, params, camPos,
+        legPositions, legBaseBright, legIdxBuf,
+      )
+      legVertCount = legResult.vertCount
+      legIdxCount = legResult.idxCount
+      legPosAttr.needsUpdate = true
+      legIdxAttr.needsUpdate = true
     }
+
+    applyColors(params.time)
   }
 
-  return { group, sepMaterial, legMaterial, update }
+  // ═══ TICK (display-rate animation between sim snapshots) ═══
+  const tick = (time: number) => {
+    // Re-run the per-vertex color write only while an ELM envelope is alive,
+    // so the swirling filaments animate; the plasma is otherwise static
+    // between sim ticks and needs no per-frame work.
+    if (!lastParams) return
+    if (elmActiveNow || time - elmOffT0 <= ELM_TAIL) applyColors(time)
+  }
+
+  return { group, sepMaterial, legMaterial, update, tick }
 }

@@ -1,7 +1,12 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 
-export type Theme = 'classic' | 'modern' | 'retro'
+export type Theme = 'signature' | 'retro'
 export type Units = 'metric' | 'imperial'
+
+/** Map any legacy/unknown stored theme to a current one. */
+function normalizeTheme(stored: string | null): Theme {
+  return stored === 'retro' ? 'retro' : 'signature'
+}
 
 interface Settings {
   theme: Theme
@@ -11,7 +16,7 @@ interface Settings {
 }
 
 const SettingsContext = createContext<Settings>({
-  theme: 'modern',
+  theme: 'signature',
   units: 'metric',
   setTheme: () => {},
   setUnits: () => {},
@@ -19,7 +24,7 @@ const SettingsContext = createContext<Settings>({
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('tok-sym-theme') as Theme) || 'modern'
+    return normalizeTheme(localStorage.getItem('tok-sym-theme'))
   })
   const [units, setUnits] = useState<Units>(() => {
     return (localStorage.getItem('tok-sym-units') as Units) || 'metric'

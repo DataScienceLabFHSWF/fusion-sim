@@ -49,8 +49,8 @@ export interface Device {
 /** A waveform point: [time_s, value] */
 export type WaveformPoint = [number, number]
 
-/** Discharge program as returned from Rust. */
-export interface DischargeProgram {
+/** Pulse program as returned from Rust. */
+export interface PulseProgram {
   ip: WaveformPoint[]
   bt: WaveformPoint[]
   ne_target: WaveformPoint[]
@@ -78,7 +78,7 @@ export function getDevice(id: string): Device | null {
 
 export type PresetId = 'hmode' | 'lmode' | 'density_limit'
 
-export function getPreset(deviceId: string, preset: PresetId): DischargeProgram | null {
+export function getPreset(deviceId: string, preset: PresetId): PulseProgram | null {
   let json = ''
   switch (preset) {
     case 'hmode':

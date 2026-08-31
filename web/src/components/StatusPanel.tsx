@@ -15,6 +15,7 @@ interface Props {
   profileNeMax: number
   profilePMax: number
   displayTime: number | null
+  usesIch?: boolean
 }
 
 export default function StatusPanel({
@@ -25,19 +26,20 @@ export default function StatusPanel({
   profileNeMax,
   profilePMax,
   displayTime,
+  usesIch = false,
 }: Props) {
   const [showProfiles, setShowProfiles] = useState(false)
   const [showPressure, setShowPressure] = useState(false)
   const [showThomson, setShowThomson] = useState(true)
 
-  // Reset profile view when discharge resets
+  // Reset profile view when pulse resets
   useEffect(() => {
     if (!finished) {
       setShowProfiles(false)
     }
   }, [finished])
 
-  // Can show profiles only after discharge finishes and profiles are processed
+  // Can show profiles only after pulse finishes and profiles are processed
   const canShowProfiles = finished && processedProfiles !== null && processedProfiles.length > 0
 
   // Compute profile index from displayTime
@@ -122,7 +124,7 @@ export default function StatusPanel({
   if (!snapshot) {
     return (
       <div className="p-3 font-mono text-sm text-gray-600 flex items-center justify-center h-full">
-        Awaiting discharge…
+        Awaiting pulse…
       </div>
     )
   }
@@ -160,7 +162,7 @@ export default function StatusPanel({
                       ? 'bg-purple-700 text-purple-200 cursor-pointer'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700 cursor-pointer'
                 }`}
-                title={!canShowProfiles ? 'Available after discharge completes or when paused' : ''}
+                title={!canShowProfiles ? 'Available after pulse completes or when paused' : ''}
               >
                 {showProfiles ? 'Params' : 'Profiles'}
               </button>
@@ -210,7 +212,7 @@ export default function StatusPanel({
       <div className="flex-1 flex flex-col justify-between">
       {/* Params & Stability */}
       <div>
-        <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-1">
+        <div className="flex items-center gap-2 panel-title mb-1.5">
           <span className="flex items-center gap-1">
             Plasma parameters
             <InfoPopup title="Plasma Parameters" position="right">{plasmaParamsInfo}</InfoPopup>
@@ -242,14 +244,14 @@ export default function StatusPanel({
       {/* ── Power & Fusion ─────────────────────────────────────── */}
       <div className="border-t border-gray-800 pt-1.5">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] text-gray-500 flex items-center gap-1">
+          <span className="panel-title flex items-center gap-1">
             Power &amp; Fusion
             <InfoPopup title="Power Balance &amp; Fusion" position="right">{powerBalanceInfo}</InfoPopup>
           </span>
         </div>
 
         {/* Input / Output two-column power balance */}
-        <PowerBalance snapshot={s} fusion={fusion} />
+        <PowerBalance snapshot={s} fusion={fusion} usesIch={usesIch} />
       </div>
 
       {/* Divertor thermal loading */}
@@ -268,23 +270,25 @@ export default function StatusPanel({
 
 // ── Power Balance: Input vs Output columns ───────────────────────────
 
-function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: FusionState | null }) {
+function PowerBalance({ snapshot: s, fusion, usesIch }: { snapshot: Snapshot; fusion: FusionState | null; usesIch?: boolean }) {
   const isDT = fusion?.fuel_type === 'DT'
   const pAlpha = fusion?.p_alpha ?? 0
 
   // Input side: external heating + alpha heating (for DT)
   const inputItems: { label: React.ReactNode; value: number; color: string }[] = [
-    { label: <><sub>OH</sub></>, value: s.p_ohmic, color: '#6b7280' },
-    { label: <><sub>NBI</sub></>, value: s.prog_p_nbi, color: '#3b82f6' },
-    { label: <><sub>ECH</sub></>, value: s.prog_p_ech, color: '#8b5cf6' },
+    { label: <><sub>OH</sub></>, value: s.p_ohmic, color: '#888888' },
+    { label: <><sub>NBI</sub></>, value: s.prog_p_nbi, color: '#56B4E9' },
+    { label: <><sub>ECH</sub></>, value: s.prog_p_ech, color: '#CC79A7' },
   ]
-  if (s.prog_p_ich > 0.01) {
-    inputItems.push({ label: <><sub>ICH</sub></>, value: s.prog_p_ich, color: '#f59e0b' })
+  // Reserve the ICH row for the whole pulse when this device programs ICH,
+  // so it doesn't pop in mid-ramp and shift the other rows.
+  if (usesIch || s.prog_p_ich > 0.01) {
+    inputItems.push({ label: <><sub>ICH</sub></>, value: s.prog_p_ich, color: '#E69F00' })
   }
   // Alpha heating bar: always present for DT (shows 0 before fusion onset),
-  // so the panel layout doesn't shift when alpha power appears mid-discharge.
+  // so the panel layout doesn't shift when alpha power appears mid-pulse.
   if (isDT) {
-    inputItems.push({ label: <><sub>&alpha;</sub></>, value: pAlpha, color: '#10b981' })
+    inputItems.push({ label: <><sub>&alpha;</sub></>, value: pAlpha, color: '#009E73' })
   }
 
   // Total input = external + alpha (for DT, alpha heats the plasma)
@@ -293,11 +297,11 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
   // Output side
   const dWdt = Math.max(s.p_input - s.p_loss - s.p_rad, -s.p_input)
   const outputItems: { label: React.ReactNode; value: number; color: string; fullLabel?: boolean }[] = [
-    { label: <><sub>rad</sub></>, value: s.p_rad, color: '#ef4444' },
-    { label: <><sub>loss</sub></>, value: s.p_loss, color: '#f97316' },
+    { label: <><sub>rad</sub></>, value: s.p_rad, color: '#D55E00' },
+    { label: <><sub>loss</sub></>, value: s.p_loss, color: '#E69F00' },
   ]
   if (Math.abs(dWdt) > 0.01) {
-    outputItems.push({ label: <>dW/dt</>, value: Math.abs(dWdt), color: '#eab308', fullLabel: true })
+    outputItems.push({ label: <>dW/dt</>, value: Math.abs(dWdt), color: '#F0E442', fullLabel: true })
   }
 
   const pOutputTotal = s.p_rad + s.p_loss + Math.max(dWdt, 0)
@@ -309,7 +313,7 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
     <div className="grid grid-cols-2 gap-x-4">
       {/* Input column */}
       <div>
-        <div className="text-[10px] text-gray-600 leading-none mb-1">Input</div>
+        <div className="text-[10px] text-gray-600 leading-none mb-1 uppercase tracking-wider">Input</div>
         {inputItems.map((item, i) => (
           <PowerBar key={i} label={<>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
@@ -317,7 +321,7 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
 
       {/* Output column */}
       <div>
-        <div className="text-[10px] text-gray-600 leading-none mb-1">Output</div>
+        <div className="text-[10px] text-gray-600 leading-none mb-1 uppercase tracking-wider">Output</div>
         {outputItems.map((item, i) => (
           <PowerBar key={i} label={item.fullLabel ? item.label : <>P{item.label}</>} value={item.value} total={maxPower} color={item.color} />
         ))}
@@ -337,7 +341,6 @@ function PowerBalance({ snapshot: s, fusion }: { snapshot: Snapshot; fusion: Fus
 function QDisplay({ fusion }: { fusion: FusionState | null }) {
   const rawQ = fusion?.q_plasma ?? 0
   const rawPFus = fusion?.p_fus ?? 0
-  const fuelType = fusion?.fuel_type ?? 'DD'
 
   // EMA smoothing — prevents ELM-driven jitter and P_fus toggling
   const smoothQ = useRef(0)
@@ -365,20 +368,22 @@ function QDisplay({ fusion }: { fusion: FusionState | null }) {
     : q >= 1 ? 'border-cyan-500/40 bg-cyan-500/5'
     : 'border-gray-700/50 bg-gray-800/50'
 
-  // Format P_fus — always show to prevent layout jumps
+  // Format P_fus with fixed width: 4 digits left of decimal + unit
+  // Uses fixed-width formatting to prevent box width changes
   const pFusStr = pFus > 0.001
-    ? (pFus < 1 ? (pFus * 1000).toFixed(0) + ' kW' : pFus.toFixed(1) + ' MW')
-    : '—'
+    ? (pFus < 1
+        ? (pFus * 1000).toFixed(0).padStart(4, '\u2007') + ' kW'  // figure space padding
+        : pFus.toFixed(1).padStart(6, '\u2007') + ' MW')
+    : '\u2007\u2007\u2007— MW'
 
   return (
-    <div className={`rounded border px-2.5 py-1.5 text-center min-w-[72px] shrink-0 ${borderColor}`}>
+    <div className={`rounded border px-2.5 py-1.5 text-center min-w-[84px] shrink-0 ${borderColor}`}>
       <div className="text-[10px] text-gray-500 leading-tight">Q<sub>plasma</sub></div>
       <div className={`text-lg font-bold tabular-nums leading-tight ${qColor}`}>
         {formatQ(q)}
       </div>
-      <div className="text-[10px] text-gray-600 leading-none">{fuelType}</div>
-      <div className="text-[9px] text-gray-600 leading-none mt-0.5 tabular-nums">
-        P<sub>fus</sub> {pFusStr}
+      <div className="text-[9px] text-gray-500 leading-none mt-0.5 tabular-nums whitespace-nowrap">
+        <span className="text-gray-500">P<sub>fus</sub></span> {pFusStr}
       </div>
     </div>
   )
@@ -428,7 +433,7 @@ function NeutronDiagnostic({ fusion }: { fusion: FusionState | null }) {
       {/* Header */}
       <div className="flex items-center gap-1 mb-1">
         <span className={`text-[11px] ${isActive ? 'text-yellow-500' : 'text-gray-600'}`}>☢</span>
-        <span className="text-[10px] text-gray-500">Neutron diagnostic</span>
+        <span className="panel-title">Neutron diagnostic</span>
         <InfoPopup title="Neutron Diagnostics" position="left">{neutronDiagnosticInfo}</InfoPopup>
         {isActive && (
           <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse shrink-0" />
@@ -507,7 +512,7 @@ function DivertorLoading({ divertor }: { divertor: DivertorState | null }) {
   return (
     <div className="border-t border-gray-800 pt-1.5">
       <div className="flex items-center gap-1.5 mb-1">
-        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+        <span className="panel-title flex items-center gap-1">
           Divertor
           <InfoPopup title="Divertor Thermal Loading" position="right">{divertorInfo}</InfoPopup>
         </span>
@@ -635,7 +640,7 @@ function Param({
       <span className="text-gray-500">{label}</span>
       <span className={`${color} tabular-nums`}>
         <span className="inline-block min-w-[3.5em] text-right">{formatted}</span>
-        <span className="text-gray-600 ml-0.5 text-[10px] inline-block min-w-[2.5em]">{unit}</span>
+        <span className="text-gray-600 ml-0.5 text-[10px] inline-block min-w-[2.5em] unit-label">{unit}</span>
       </span>
     </div>
   )
@@ -655,7 +660,7 @@ function PowerBar({
   const frac = total > 0 ? Math.min(value / total, 1) : 0
   return (
     <div className="flex items-center gap-1.5 leading-none py-0.5">
-      <span className="text-[10px] text-gray-500 w-10 text-right shrink-0">{label}</span>
+      <span className="text-[10px] text-gray-500 w-10 text-right shrink-0 unit-label">{label}</span>
       <div className="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-200"

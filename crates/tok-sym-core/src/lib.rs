@@ -26,7 +26,7 @@
 //! - **[`contour`]** — Marching squares algorithm for flux surface extraction
 //!   from 2D psi grids
 //! - **[`simulation`]** — Top-level orchestrator tying all modules together,
-//!   plus discharge program definitions and preset constructors
+//!   plus pulse program definitions and preset constructors
 //!
 //! ## WASM API
 //!
@@ -38,10 +38,10 @@
 //!
 //! ```rust
 //! use tok_sym_core::devices;
-//! use tok_sym_core::simulation::{Simulation, DischargeProgram};
+//! use tok_sym_core::simulation::{Simulation, PulseProgram};
 //!
 //! let device = devices::diiid();
-//! let program = DischargeProgram::standard_hmode(&device);
+//! let program = PulseProgram::standard_hmode(&device);
 //! let mut sim = Simulation::new(device, program);
 //! sim.start();
 //!
@@ -70,7 +70,7 @@ pub mod transport;
 /// Disruption risk assessment and multi-phase disruption dynamics.
 pub mod disruption;
 
-/// Top-level simulation orchestrator and discharge program definitions.
+/// Top-level simulation orchestrator and pulse program definitions.
 pub mod simulation;
 
 /// Synthetic diagnostic signal generation.

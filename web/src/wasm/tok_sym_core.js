@@ -47,7 +47,7 @@ export class SimHandle {
         return ret !== 0;
     }
     /**
-     * Create a new simulation from a device id and a JSON discharge program.
+     * Create a new simulation from a device id and a JSON pulse program.
      * Returns `None` (throws in JS) if inputs are invalid.
      * @param {string} device_id
      * @param {string} program_json
@@ -198,7 +198,7 @@ export function preset_density_limit_json(device_id) {
 }
 
 /**
- * Return the standard H-mode discharge program as JSON.
+ * Return the standard H-mode pulse program as JSON.
  * @param {string} device_id
  * @returns {string}
  */
@@ -218,7 +218,7 @@ export function preset_hmode_json(device_id) {
 }
 
 /**
- * Return the L-mode discharge program as JSON.
+ * Return the L-mode pulse program as JSON.
  * @param {string} device_id
  * @returns {string}
  */

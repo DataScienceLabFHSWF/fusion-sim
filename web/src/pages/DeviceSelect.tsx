@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getDevices, type Device } from '../lib/wasm'
+import PlasmaBackdrop from '../components/PlasmaBackdrop'
 import { DIIID_LIMITER } from '../lib/diiid-geometry'
 import { JET_LIMITER } from '../lib/jet-geometry'
 import { ITER_LIMITER } from '../lib/iter-geometry'
@@ -114,133 +115,160 @@ export default function DeviceSelect() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8">
-      {/* Header */}
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold tracking-tight mb-2 text-white">
-          fusionsimulator<span className="text-gray-500">.io</span>
-        </h1>
-        <p className="text-gray-400 text-lg">
-          Real-time tokamak discharge simulator
-        </p>
-      </div>
-
-      {/* Device cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl w-full">
-        {devices.map((d) => {
-          const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
-          return (
-            <button
-              key={d.id}
-              onClick={() => navigate(`/program/${d.id}`)}
-              className="group bg-gray-900 border border-gray-700 rounded-lg p-6 text-left
-                         hover:border-cyan-500 hover:shadow-lg hover:shadow-cyan-500/10
-                         transition-all duration-200 cursor-pointer
-                         flex flex-col"
-            >
-              {/* Cross-section silhouette — fixed height */}
-              <div className="h-32">
-                <DeviceSilhouette device={d} />
-              </div>
-
-              {/* Machine name */}
-              <div className="flex items-baseline justify-between mb-1 mt-3">
-                <h2 className="text-2xl font-bold text-white group-hover:text-cyan-400 transition-colors">
-                  {d.name}
-                </h2>
-                <div className="text-right shrink-0 ml-2">
-                  <div className="text-xs text-gray-500">{meta.location}</div>
-                  {meta.status && (
-                    <div className="text-[10px] text-gray-600 italic">{meta.status}</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Stats row */}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400 mb-3 font-mono">
-                <span>R₀ = {d.r0.toFixed(2)} m</span>
-                <span>a = {d.a.toFixed(2)} m</span>
-                <span>Iₚ ≤ {d.ip_max} MA</span>
-                <span>Bₜ ≤ {d.bt_max} T</span>
-                <span>κ = {d.kappa.toFixed(1)}</span>
-                <span>V = {d.volume} m³</span>
-              </div>
-
-              {/* Description — flex-grow pushes the arrow to the bottom */}
-              <p className="text-gray-500 text-sm leading-relaxed flex-grow">
-                {meta.desc}
-              </p>
-
-              {/* Arrow — always at bottom of card */}
-              <div className="mt-4 text-right text-gray-600 group-hover:text-cyan-400 transition-colors">
-                Select →
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Footer */}
-      <footer className="mt-12 max-w-3xl w-full text-center space-y-4">
-        {/* Disclaimer */}
-        <div className="px-5 py-3 rounded-lg border border-gray-800 bg-gray-900/50 text-gray-500 text-[11px] leading-relaxed">
-          <strong className="text-gray-400">Disclaimer:</strong> This simulator uses zero-dimensional
-          scaling laws and analytic approximations (0D power balance, IPB98(y,2) confinement scaling,
-          Cerfon-Freidberg equilibrium). Results are designed for{' '}
-          <em>qualitative educational use</em> and should not be interpreted as engineering
-          predictions or used for reactor design.
-        </div>
-
-        {/* Links row */}
-        <div className="flex items-center justify-center gap-3 text-gray-600 text-xs">
-          <span>Open-source · Educational</span>
-          <span className="text-gray-700">·</span>
-          <Link
-            to="/bibliography"
-            className="text-cyan-600 hover:text-cyan-400 transition-colors"
-          >
-            Physics Bibliography
-          </Link>
-          <span className="text-gray-700">·</span>
-          <Link
-            to="/replay"
-            className="text-cyan-600 hover:text-cyan-400 transition-colors"
-          >
-            🔄 Replay Mode
-          </Link>
-        </div>
-
-        {/* Contribute */}
-        <p className="text-gray-600 text-[11px]">
-          Interested in contributing?{' '}
+    <div className="page-enter relative">
+      {/* ── Top nav (persists above everything) ── */}
+      <nav className="sticky top-0 z-50 flex items-center justify-between gap-4 px-6 sm:px-10 py-3 border-b border-gray-800 bg-[var(--c-base)]/85 backdrop-blur">
+        <span className="hidden sm:inline font-mono text-[11px] tracking-[0.22em] uppercase text-gray-300">
+          fusionsimulator<span className="text-gray-600">.io</span>
+        </span>
+        <div className="flex items-center gap-5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-500">
+          <Link to="/bibliography" className="hover:text-cyan-400 transition-colors">Bibliography</Link>
           <a
             href="https://github.com/d-burg/fusion-sim"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-cyan-600 hover:text-cyan-400 transition-colors"
+            className="hover:text-cyan-400 transition-colors"
           >
-            View the project on GitHub
+            GitHub
           </a>
-        </p>
+        </div>
+      </nav>
 
-        {/* Attribution */}
-        <p className="text-gray-600 text-[11px]">
-          &copy; 2026 Daniel Burgess and the Columbia Fusion Research Center &middot; v{__APP_VERSION__}
-        </p>
-      </footer>
+      {/* ── Hero (pinned; the device panel parallax-slides over it) ── */}
+      <header className="sticky top-0 z-0 h-[100svh] px-6 sm:px-10 overflow-hidden flex items-center">
+        <PlasmaBackdrop className="absolute inset-0 w-full h-full pointer-events-none" />
+        {/* Fade the plasma into the page on the left so the wordmark stays crisp */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[var(--c-base)] via-[var(--c-base)]/60 to-transparent" />
+        <div className="relative max-w-6xl mx-auto w-full z-10 -mt-12">
+          <h1 className="stagger-1 whitespace-nowrap text-[clamp(1.7rem,8.5vw,4.5rem)] font-bold tracking-tight text-white">
+            fusionsimulator<span className="text-gray-600">.io</span>
+          </h1>
+          <p className="stagger-2 mt-4 text-gray-400 text-base sm:text-lg font-mono tracking-tight">
+            Real-time tokamak plasma simulator
+          </p>
+          <p className="stagger-2 mt-2 text-gray-600 text-[11px] font-mono tracking-wider uppercase">
+            0D transport &middot; MHD equilibrium &middot; ELM dynamics &middot; Fusion diagnostics
+          </p>
+        </div>
+        {/* Scroll affordance */}
+        <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 font-mono text-[10px] tracking-[0.18em] uppercase text-gray-600 scroll-hint">
+          <span>Select a device</span>
+          <span className="text-base leading-none">↓</span>
+        </div>
+      </header>
+
+      {/* ── Device selection (slides up over the pinned hero) ── */}
+      <main className="relative z-10 bg-[var(--c-base)] border-t border-gray-800 shadow-[0_-28px_60px_rgba(0,0,0,0.6)] px-6 sm:px-10 pt-12 pb-16">
+        <div className="max-w-6xl mx-auto">
+          <div className="panel-title pb-2 mb-px">
+            <span className="panel-num">01 · </span>Select a device
+          </div>
+
+          {/* Hairline-tiled device row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--c-line)] border-y border-gray-800">
+            {devices.map((d, i) => {
+              const meta = DEVICE_META[d.id] ?? { location: '', desc: '' }
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => navigate(`/program/${d.id}`)}
+                  className={`stagger-${i + 3} group bg-gray-900 p-6 text-left
+                             hover:bg-[var(--c-raised)] transition-colors duration-200 cursor-pointer
+                             flex flex-col`}
+                >
+                  {/* Cross-section silhouette */}
+                  <div className="h-40">
+                    <DeviceSilhouette device={d} />
+                  </div>
+
+                  {/* Machine name */}
+                  <h2 className="font-mono text-xl font-bold tracking-tight text-white group-hover:text-cyan-400 transition-colors mt-3">
+                    {d.name}
+                  </h2>
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-gray-600 mb-3 mt-0.5">
+                    {meta.location}{meta.status ? ` · ${meta.status}` : ''}
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400 mb-3 font-mono tabular-nums">
+                    <span>R₀ = {d.r0.toFixed(2)} m</span>
+                    <span>a = {d.a.toFixed(2)} m</span>
+                    <span>Iₚ ≤ {d.ip_max} MA</span>
+                    <span>Bₜ ≤ {d.bt_max} T</span>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-gray-500 text-sm leading-relaxed flex-grow">
+                    {meta.desc}
+                  </p>
+
+                  {/* Arrow */}
+                  <div className="mt-4 font-mono text-[11px] uppercase tracking-wider text-gray-600 group-hover:text-cyan-400 transition-colors">
+                    Select →
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Footer */}
+          <footer className="mt-12 space-y-4 text-[11px] leading-relaxed">
+            <div className="border-l-2 border-gray-700 pl-4 py-1 text-gray-500 max-w-3xl">
+              <span className="font-mono uppercase tracking-wider text-gray-400">Disclaimer</span>
+              {' — '}This simulator uses zero-dimensional scaling laws and analytic approximations
+              (0D power balance, IPB98(y,2) confinement scaling, Cerfon-Freidberg equilibrium).
+              Results are designed for <em>qualitative educational use</em> and should not be
+              interpreted as engineering predictions or used for reactor design.
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-gray-600 pt-2">
+              <span>Open-source · Educational</span>
+              <span className="text-gray-700">·</span>
+              <Link to="/bibliography" className="hover:text-cyan-400 transition-colors">
+                Physics Bibliography
+              </Link>
+              <span className="text-gray-700">·</span>
+              <a
+                href="https://github.com/d-burg/fusion-sim"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-cyan-400 transition-colors"
+              >
+                GitHub
+              </a>
+              <span className="text-gray-700">·</span>
+              <span>v{__APP_VERSION__}</span>
+            </div>
+            <p className="font-mono text-[10px] text-gray-700">
+              © 2026 Daniel Burgess · Columbia Fusion Research Center
+            </p>
+          </footer>
+        </div>
+      </main>
 
       {/* ─── Tutorial prompt overlay ─── */}
       {showTutorialPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm
                         animate-[fadeIn_0.3s_ease-out]">
-          <div className="bg-gray-950 border border-cyan-500/30 rounded-lg shadow-2xl shadow-cyan-500/10
+          <div className="bg-gray-950 border border-gray-700 rounded-lg shadow-2xl
                           max-w-md w-full mx-4 overflow-hidden animate-[slideUp_0.4s_ease-out]">
             {/* Accent bar */}
-            <div className="h-1 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-600" />
+            <div className="h-0.5 bg-cyan-500" />
 
             <div className="p-6">
               <div className="text-center mb-4">
-                <div className="text-3xl mb-2">⚛</div>
+                <svg
+                  className="w-9 h-9 mx-auto mb-3 text-cyan-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.25}
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+                  <ellipse cx="12" cy="12" rx="10" ry="4.2" />
+                  <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(60 12 12)" />
+                  <ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(120 12 12)" />
+                </svg>
                 <h2 className="text-xl font-bold text-white mb-1">New to Fusion?</h2>
                 <p className="text-gray-400 text-sm">
                   Take a 2-minute guided tour of the control room to learn
@@ -268,7 +296,7 @@ export default function DeviceSelect() {
               </div>
 
               <p className="text-center text-gray-600 text-[10px] mt-4">
-                The tour will load DIII-D in H-mode as a reference discharge
+                The tour will load DIII-D in H-mode as a reference pulse
               </p>
             </div>
           </div>

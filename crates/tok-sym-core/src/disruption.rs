@@ -124,7 +124,7 @@ impl DisruptionModel {
         self.risk_radiation = sigmoid(p_rad_frac, 0.80, 0.08);
 
         // Locked mode: base random rate increased near other limits
-        // Base rate kept very low so safe discharges almost never disrupt.
+        // Base rate kept very low so safe pulses almost never disrupt.
         // Near operational limits the amplification factors dominate.
         let base_locked = 0.0005; // 0.05% per second base rate
         self.risk_locked_mode =
@@ -139,7 +139,12 @@ impl DisruptionModel {
             * (1.0 - self.risk_radiation.powi(3))
             * (1.0 - self.risk_locked_mode);
 
-        self.risk = self.risk.clamp(0.0, 1.0);
+        // Floor at ~1% during normal operation — real tokamak pulses
+        // always carry a small baseline disruption probability from
+        // unmodeled MHD events, wall interactions, and impurity influx.
+        // Uses the locked mode RNG for mild stochasticity (0.5-1.5%).
+        let floor = 0.005 + self.risk_locked_mode.min(0.01);
+        self.risk = self.risk.max(floor).clamp(0.0, 1.0);
     }
 
     /// Check if a disruption should be triggered this timestep.
@@ -317,7 +322,7 @@ impl DisruptionModel {
         });
     }
 
-    /// Reset the disruption model for a new discharge.
+    /// Reset the disruption model for a new pulse.
     pub fn reset(&mut self) {
         self.risk = 0.0;
         self.risk_greenwald = 0.0;

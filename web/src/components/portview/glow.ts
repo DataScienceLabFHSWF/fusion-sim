@@ -32,6 +32,8 @@ export interface GlowGroup {
   group: THREE.Group
   pixelRatio: number  // stored externally, used for size scaling
   update: (params: GlowUpdateParams) => void
+  /** Re-run the shimmer/flicker animation at display rate between sim ticks. */
+  tick: (time: number) => void
 }
 
 export interface StrikePoint {
@@ -41,8 +43,12 @@ export interface StrikePoint {
 
 export interface GlowUpdateParams {
   strikePoints: StrikePoint[]
-  intensity: number  // overall glow brightness
-  powerScale: number
+  /** Overall glow brightness — physics-driven (see divertorVisuals.ts) */
+  intensity: number
+  /** Strike band half-width on the target (metres), from λ_q × flux expansion */
+  bandWidth?: number
+  /** Glow tint override — recycling light blended toward blackbody incandescence */
+  color?: { r: number; g: number; b: number }
   axisR: number
   time: number
 }
@@ -50,8 +56,9 @@ export interface GlowUpdateParams {
 /**
  * Create a canvas-based Gaussian glow texture for point sprites.
  * Radial falloff matches the original shader: exp(-r * 3.0)
+ * Shared by the strike glow and the ELM filament system.
  */
-function createGlowTexture(size = 64): THREE.CanvasTexture {
+export function createGlowTexture(size = 64): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -145,11 +152,13 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
 
   let activeCount = 0
   let lastStrikeFP = ''
+  let lastParams: GlowUpdateParams | null = null
 
   // Phi range constants
   const phiSpan = cfg.phiMax - cfg.phiMin
 
   const update = (params: GlowUpdateParams) => {
+    lastParams = params
     if (params.strikePoints.length === 0 || params.intensity <= 0) {
       points.visible = false
       activeCount = 0
@@ -158,7 +167,7 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
     }
 
     const time = params.time
-    const intensityBase = params.intensity * params.powerScale * GLOW_INTENSITY
+    const intensityBase = params.intensity * GLOW_INTENSITY
 
     // Strike point fingerprint — detect when strikes appear/disappear
     const fp = params.strikePoints
@@ -184,7 +193,15 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
 
     // ═══ PER-FRAME UPDATE: position jitter + stochastic brightness ═══
     const jitAmp = t.jitterAmplitude
-    const glowR = t.color.r, glowG = t.color.g, glowB = t.color.b
+    const col = params.color ?? t.color
+    const glowR = col.r, glowG = col.g, glowB = col.b
+
+    // Express the SOL band width (λ_q × flux expansion) through the sprite
+    // SIZE rather than scattering positions — keeps the 600 sprites on a
+    // continuous overlapping ring (a solid glowing band) instead of breaking
+    // them into discrete orbs. Nominal band ≈ 3 cm → device point size.
+    const bandW = params.bandWidth ?? 0
+    material.size = t.pointSize * Math.min(Math.max(bandW / 0.03, 0.7), 1.9)
     // Offset strike point sprites inward from the wall surface so they're
     // visible through the open toroidal sector.  Without this, sprites sit
     // exactly on the wall mesh and are occluded by z-fighting / depth test.
@@ -206,7 +223,11 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
       const rOff = rSign * INWARD_OFFSET
       const zOff = zSign * INWARD_OFFSET * 0.7
 
-      const v = toroidal(baseR + jitR + rOff, baseZ + jitZ + zOff, basePhi[vi])
+      const v = toroidal(
+        baseR + jitR + rOff,
+        baseZ + jitZ + zOff,
+        basePhi[vi],
+      )
       posBuffer[vi * 3] = v.x
       posBuffer[vi * 3 + 1] = v.y
       posBuffer[vi * 3 + 2] = v.z
@@ -230,11 +251,17 @@ export function createGlowGroup(cfg: PortConfig, tuning?: GlowTuning): GlowGroup
     points.visible = true
   }
 
+  const tick = (time: number) => {
+    if (!lastParams || activeCount === 0) return
+    update({ ...lastParams, time })
+  }
+
   return {
     group,
     get pixelRatio() { return storedPixelRatio },
     set pixelRatio(v: number) { storedPixelRatio = v },
     update,
+    tick,
   }
 }
 

@@ -1,6 +1,6 @@
 # fusionsimulator.io
 
-A real-time tokamak plasma simulator that runs entirely in the browser.
+A real-time tokamak plasma simulator that runs entirely in your browser.
 fusionsimulator.io combines a Rust physics engine (compiled to WebAssembly) with a
 React/TypeScript frontend to provide an interactive control room experience
 for exploring tokamak plasma behavior.
@@ -10,17 +10,17 @@ for exploring tokamak plasma behavior.
 - **Four tokamak devices:** DIII-D, JET, ITER, and CENTAUR (conceptual
   negative-triangularity) with device-specific geometry, heating systems,
   and engineering limits
-- **Three discharge presets per device:** H-mode, L-mode, and Density Limit
+- **Three pulse presets per device:** H-mode, L-mode, and Density Limit
   scenarios with realistic waveform programming
 - **Real-time physics:** 0D power balance transport, analytic Grad-Shafranov
   equilibrium, tanh-pedestal profiles, ELM dynamics, and disruption modeling
 - **Interactive control room:** 2D equilibrium cross-section, 19-channel time
   trace viewer, plasma parameter dashboard, and 3D tokamak port view
-- **Shot Planner:** Edit discharge parameters (Ip, heating power, density,
+- **Pulse Planner:** Edit pulse parameters (Ip, heating power, density,
   shaping) and run custom scenarios
 - **Fusion diagnostics:** Computed fusion power/Q, neutron rate, divertor heat
   flux with surface temperature modeling
-- **Post-discharge analysis:** Time scrubbing, radial profile viewer with
+- **Post-pulse analysis:** Time scrubbing, radial profile viewer with
   synthetic Thomson scattering
 
 ## Physics Models
@@ -160,7 +160,7 @@ For detailed documentation of every module, function, and component, see
 │  │ • Transport  │    │    ├─ StatusPanel       │  │
 │  │ • Profiles   │    │    ├─ UnifiedTracePanel │  │
 │  │ • Disruption │    │    ├─ PortView (3D)     │  │
-│  │ • Contours   │    │    └─ ShotPlanner       │  │
+│  │ • Contours   │    │    └─ PulsePlanner      │  │
 │  └──────────────┘    └────────────────────────┘  │
 └─────────────────────────────────────────────────┘
 ```

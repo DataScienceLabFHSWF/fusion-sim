@@ -36,7 +36,7 @@ const STEPS: TutorialStep[] = [
           away from the walls.
         </p>
         <p className="mt-2">
-          Each simulation run is called a <b>discharge</b> or <b>shot</b>. You
+          Each simulation run is called a <b>pulse</b>. You
           will program the heating power, plasma current, density, and shaping —
           then watch the plasma respond in real time. Your job is to keep the
           plasma stable, avoid disruptions, and maximize fusion performance.
@@ -110,7 +110,7 @@ const STEPS: TutorialStep[] = [
       <>
         <p>
           This panel shows the <b>time evolution</b> of key plasma parameters
-          throughout the discharge, like an oscilloscope or strip-chart
+          throughout the pulse, like an oscilloscope or strip-chart
           recorder in a real control room.
         </p>
 
@@ -134,9 +134,9 @@ const STEPS: TutorialStep[] = [
 
         <p className="mt-2 text-cyan-300 font-semibold text-[11px]">Scrubbing</p>
         <p>
-          After a discharge finishes, you can click and drag on this panel
+          After a pulse finishes, you can click and drag on this panel
           to <b>scrub</b> through time — replaying the equilibrium and
-          diagnostics at any moment in the shot.
+          diagnostics at any moment in the pulse.
         </p>
       </>
     ),
@@ -298,7 +298,7 @@ const STEPS: TutorialStep[] = [
     content: (
       <>
         <p className="text-cyan-300 font-semibold">
-          Run discharges in a fusion power plant that:
+          Run pulses in a fusion power plant that:
         </p>
         <ul className="list-disc list-inside mt-1 space-y-1">
           <li>
@@ -348,12 +348,12 @@ const STEPS: TutorialStep[] = [
         <div className="mt-3 p-2 bg-gray-800/40 rounded border border-gray-700/30 text-[10px] text-gray-400">
           <p className="font-semibold text-gray-300 mb-1">Quick Controls Recap</p>
           <ul className="space-y-0.5">
-            <li><b>▶ Start / ⏸ Pause</b> — run or pause the discharge</li>
+            <li><b>▶ Start / ⏸ Pause</b> — run or pause the pulse</li>
             <li><b>Speed buttons</b> — 0.5x to 2x playback speed</li>
             <li><b>Device dropdown</b> — switch between tokamaks (DIII-D, JET, ITER, CENTAUR)</li>
             <li><b>Preset buttons</b> — H-mode, L-mode, or Density Limit scenarios</li>
-            <li><b>📋 Edit</b> — open the shot planner to customize the discharge program</li>
-            <li><b>After discharge</b> — click on the trace panel to scrub through time</li>
+            <li><b>📋 Edit</b> — open the pulse planner to customize the program</li>
+            <li><b>After pulse</b> — click on the trace panel to scrub through time</li>
           </ul>
         </div>
       </>

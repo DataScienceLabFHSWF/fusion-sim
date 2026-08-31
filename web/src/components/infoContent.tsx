@@ -58,7 +58,7 @@ export const equilibriumInfo = (
       given magnetic measurements from sensors around the vessel,
       the code iteratively reconstructs the flux map and plasma
       boundary. This is the standard tool for interpreting tokamak
-      discharges.
+      pulses.
     </p>
 
     <Heading>Our Approximation: Cerfon-Freidberg</Heading>
@@ -194,7 +194,7 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
       peak electron temperature at the magnetic axis, measured by
       Thomson scattering or ECE diagnostics. In large tokamaks,
       T<sub>e0</sub> can exceed 10&ndash;30 keV during high-performance
-      discharges.
+      pulses.
     </>
   ),
   te_ped: (
@@ -277,7 +277,7 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
       <b>Impurity fraction (f<sub>Imp</sub>)</b> &mdash; the fraction of
       impurity ions (carbon, tungsten, etc.) relative to the main
       fuel species. Impurities dilute the fuel and increase
-      radiative losses. Wall conditioning (boronization, glow discharge
+      radiative losses. Wall conditioning (boronization, glow pulse
       cleaning) is used to minimize impurity influx.
     </>
   ),
@@ -295,12 +295,12 @@ export const traceDescriptions: Record<string, React.ReactNode> = {
 
 /* ─── Trace panel (composite) ────────────────────────── */
 
-export function traceInfoContent(traces: { key: string; label: string; unit: string; color: string }[]) {
+export function traceInfoContent(traces: { key: string; base: string; sub: string; unit: string; color: string }[]) {
   return (
     <>
       <p className="mb-2">
         Time traces show the evolution of key plasma parameters throughout
-        the discharge. Each trace is updated at the simulation timestep.
+        the pulse. Each trace is updated at the simulation timestep.
       </p>
       {traces.map(t => (
         <div key={t.key} className="mb-2 pl-1 border-l-2" style={{ borderColor: t.color }}>
@@ -310,7 +310,7 @@ export function traceInfoContent(traces: { key: string; label: string; unit: str
               style={{ backgroundColor: t.color }}
             />
             <span className="text-gray-200 font-bold text-[11px]">
-              {t.label}
+              {t.base}<sub>{t.sub}</sub>
               {t.unit && <span className="text-gray-500 font-normal ml-1">[{t.unit}]</span>}
             </span>
           </div>

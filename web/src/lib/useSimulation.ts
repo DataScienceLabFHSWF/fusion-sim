@@ -5,13 +5,13 @@ import { processProfileFrames } from './profileUtils'
 import { computeFusion } from './fusionPhysics'
 
 const DT = 0.005 // 5 ms physics timestep
-// Trace history (lightweight: ~200 bytes/entry) — large buffer for full-discharge coverage.
-// 30,000 entries ≈ 500s at 60fps (enough for ITER 400s shots at 1x speed). ~6 MB.
+// Trace history (lightweight: ~200 bytes/entry) — large buffer for full-pulse coverage.
+// 30,000 entries ≈ 500s at 60fps (enough for ITER 400s pulses at 1x speed). ~6 MB.
 const MAX_TRACE_HISTORY = 30000
-// Snapshot history (heavy: ~50 KB/entry with equilibrium contours) — moderate buffer.
-// 2,000 entries ≈ 33s at 60fps. Post-discharge scrubbing uses time-based lookup,
-// so sparser snapshots just mean slightly less smooth equilibrium scrubbing.  ~100 MB max.
-const MAX_SNAPSHOT_HISTORY = 2000
+// Snapshot history (heavy: ~50 KB/entry with equilibrium contours).
+// 8,000 entries ≈ 133s at 60fps — enough for ITER's full 100s pulse.
+// Post-pulse scrubbing uses time-based lookup. ~400 MB max.
+const MAX_SNAPSHOT_HISTORY = 8000
 
 export interface SimState {
   snapshot: Snapshot | null            // live (latest) snapshot
@@ -20,10 +20,10 @@ export interface SimState {
   snapshotHistory: Snapshot[]          // full snapshots for scrub→equilibrium sync
   running: boolean
   wallJson: string
-  programJson: string                  // current discharge program JSON for target traces
+  programJson: string                  // current pulse program JSON for target traces
   scrubTime: number | null             // null = live, number = sim time for scrub position
   finished: boolean                    // true when status is Complete or Disrupted
-  processedProfiles: ProcessedProfile[] | null  // null while running, populated post-discharge
+  processedProfiles: ProcessedProfile[] | null  // null while running, populated post-pulse
   profileTeMax: number
   profileNeMax: number
   profilePMax: number
@@ -57,6 +57,7 @@ export function useSimulation(
   const programJsonRef = useRef<string>('{}')
   const speedRef = useRef(1.0)
   const stepAccRef = useRef(0.0)  // fractional step accumulator for sub-1x speeds
+  const pFusSmoothedRef = useRef(0.0) // smoothed P_fus for ELM resilience
   const profileFramesRef = useRef<ProfileFrame[]>([])
   const lastProfileTimeRef = useRef<number>(-Infinity)
 
@@ -101,6 +102,7 @@ export function useSimulation(
     }
     simRef.current = handle
     historyRef.current = []
+    pFusSmoothedRef.current = 0
     snapshotHistoryRef.current = []
     profileFramesRef.current = []
     lastProfileTimeRef.current = -Infinity
@@ -138,6 +140,7 @@ export function useSimulation(
     }
     simRef.current = handle
     historyRef.current = []
+    pFusSmoothedRef.current = 0
     snapshotHistoryRef.current = []
     profileFramesRef.current = []
     lastProfileTimeRef.current = -Infinity
@@ -266,8 +269,19 @@ export function useSimulation(
         te_ped: snap.te_ped,
         ne_line: snap.ne_line,
         impurity_fraction: snap.impurity_fraction,
-        p_fus: currentDeviceObjRef.current
-          ? computeFusion(snap!, currentDeviceObjRef.current).p_fus : 0,
+        p_fus: (() => {
+          const raw = currentDeviceObjRef.current
+            ? computeFusion(snap!, currentDeviceObjRef.current).p_fus : 0
+          // Smooth P_fus with tau_E to filter ELM-scale fluctuations.
+          // Fusion reactions are concentrated in the hot core, which acts
+          // as a thermal low-pass filter — edge ELM crashes don't affect
+          // core fusion rate on ELM timescales.
+          const tau = Math.max(snap!.tau_e ?? 0.1, 0.05)
+          const dt = totalSteps * DT
+          const alpha = Math.min(dt / tau, 1.0)
+          pFusSmoothedRef.current += (raw - pFusSmoothedRef.current) * alpha
+          return pFusSmoothedRef.current
+        })(),
         elm_suppressed: snap.elm_suppressed,
         elm_active: anyElmActive,
       }
@@ -282,7 +296,7 @@ export function useSimulation(
         snapshotHistoryRef.current = snapshotHistoryRef.current.slice(-MAX_SNAPSHOT_HISTORY)
       }
 
-      // Capture profile frame every 50ms for post-discharge viewing
+      // Capture profile frame every 50ms for post-pulse viewing
       if (snap.te_profile && snap.time - lastProfileTimeRef.current >= 0.05) {
         profileFramesRef.current.push({
           time: snap.time,
@@ -296,7 +310,7 @@ export function useSimulation(
       const isFinished = snap.status === 'Complete' || snap.status === 'Disrupted'
 
       setState((prev) => {
-        // Post-discharge: process accumulated profile frames (only once)
+        // Post-pulse: process accumulated profile frames (only once)
         let processedProfiles = prev.processedProfiles
         let profileTeMax = prev.profileTeMax
         let profileNeMax = prev.profileNeMax
@@ -352,6 +366,7 @@ export function useSimulation(
       simRef.current.reset()
     }
     historyRef.current = []
+    pFusSmoothedRef.current = 0
     snapshotHistoryRef.current = []
     profileFramesRef.current = []
     lastProfileTimeRef.current = -Infinity

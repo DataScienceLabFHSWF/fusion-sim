@@ -10,12 +10,29 @@ interface Props {
   limiterPoints?: [number, number][] // optional CAD limiter — replaces wall when provided
 }
 
-/** Colour palette for flux surfaces — core (warm) → edge (cool). */
+/** Inferno colormap — perceptually uniform, colourblind-robust (vs the old
+ *  ad-hoc orange→blue ramp). 10 anchor stops, linearly interpolated. */
+const INFERNO: [number, number, number][] = [
+  [0, 0, 4], [27, 12, 65], [74, 12, 107], [120, 28, 109], [165, 44, 96],
+  [207, 68, 70], [237, 105, 37], [251, 154, 6], [247, 208, 60], [252, 255, 164],
+]
+function inferno(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, t)) * (INFERNO.length - 1)
+  const i = Math.floor(x)
+  const f = x - i
+  const a = INFERNO[i]
+  const b = INFERNO[Math.min(i + 1, INFERNO.length - 1)]
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+  ]
+}
+
+/** Flux-surface colour — core (level 0) is hottest/brightest, edge (level 1)
+ *  fades to dark, following the inferno luminance ramp. */
 function fluxColor(normalizedLevel: number): string {
-  // level 0 = core (hot orange/white), level 1 = edge (cool blue)
-  const r = Math.round(255 - normalizedLevel * 180)
-  const g = Math.round(140 - normalizedLevel * 100)
-  const b = Math.round(60 + normalizedLevel * 195)
+  const [r, g, b] = inferno(1 - normalizedLevel)
   return `rgb(${r},${g},${b})`
 }
 
@@ -23,7 +40,6 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const { theme } = useSettings()
-  const isModern = theme === 'modern'
   const isRetro = theme === 'retro'
 
   const draw = useCallback(() => {
@@ -47,7 +63,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     const H = rect.height
 
     // Clear
-    ctx.fillStyle = isRetro ? '#000000' : isModern ? '#08080a' : '#0a0e17'
+    ctx.fillStyle = isRetro ? '#000000' : '#0e0f11'
     ctx.fillRect(0, 0, W, H)
 
     // Use limiter as wall boundary when provided, otherwise parse wallJson
@@ -145,24 +161,37 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       ctx.restore()
     }
 
-    // --- Draw separatrix (clipped to wall) ---
+    // --- Draw separatrix ---
     if (snapshot && snapshot.separatrix && snapshot.separatrix.points.length > 2) {
+      const applySepStyle = () => {
+        if (isRetro) {
+          ctx.strokeStyle = '#33ff33'
+          ctx.lineWidth = 2
+          ctx.shadowColor = '#33ff33'
+          ctx.shadowBlur = 4
+        } else {
+          ctx.strokeStyle = '#facc15' // bright yellow
+          ctx.lineWidth = 2
+          ctx.shadowColor = '#facc15'
+          ctx.shadowBlur = 6
+        }
+      }
+
+      // Main separatrix body, clipped to the wall.
       ctx.save()
       buildWallPath()
       ctx.clip()
-
-      if (isRetro) {
-        ctx.strokeStyle = '#33ff33'
-        ctx.lineWidth = 2
-        ctx.shadowColor = '#33ff33'
-        ctx.shadowBlur = 4
-      } else {
-        ctx.strokeStyle = '#facc15' // bright yellow
-        ctx.lineWidth = 2
-        ctx.shadowColor = '#facc15'
-        ctx.shadowBlur = 6
-      }
+      applySepStyle()
       drawContour(ctx, snapshot.separatrix, toX, toY, jumpThresh)
+      ctx.shadowBlur = 0
+      ctx.restore()
+
+      // Divertor-leg extensions to the limiter strike points, drawn UNCLIPPED so
+      // they reach into the divertor (e.g. the DIII-D upper baffle slot) instead
+      // of being cut off at the main wall boundary.
+      ctx.save()
+      applySepStyle()
+      extendLegsToWall(ctx, snapshot.separatrix.points, wall, toX, toY, jumpThresh)
       ctx.shadowBlur = 0
       ctx.restore()
     }
@@ -173,11 +202,17 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     buildWallPath()
     ctx.stroke()
 
-    // --- Draw magnetic axis (only when plasma is present) ---
-    // Compute axis from centroid of the innermost flux surface so it
-    // tracks the actual rendered contours during dynamic shape changes.
+    // --- Draw magnetic axis + X-points (clipped to wall interior) ---
+    // Clip to the wall polygon so markers don't appear outside the limiter
+    // during ramp-up when equilibrium geometry is still evolving.
     const hasPlasma = snapshot && snapshot.ip > 0.05
+    ctx.save()
+    buildWallPath()
+    ctx.clip()
+
     if (hasPlasma && snapshot.axis_r > 0) {
+      // Compute axis from centroid of the innermost flux surface so it
+      // tracks the actual rendered contours during dynamic shape changes.
       let axisR = snapshot.axis_r
       let axisZ = snapshot.axis_z
       const innermost = snapshot.flux_surfaces?.[0]
@@ -210,7 +245,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
       ctx.globalAlpha = 1
     }
 
-    // --- Draw X-point(s) ---
+    // --- X-point(s) ---
     const drawXMark = (r: number, z: number) => {
       const xp = toX(r)
       const yp = toY(z)
@@ -230,6 +265,8 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     if (hasPlasma && (snapshot.xpoint_upper_r ?? 0) > 0) {
       drawXMark(snapshot.xpoint_upper_r, snapshot.xpoint_upper_z)
     }
+
+    ctx.restore() // remove wall clip
 
     // --- R / Z Axes ---
     // Pick a "nice" tick step that avoids overcrowding at small panel sizes.
@@ -316,7 +353,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
 
     // --- Labels ---
     const labelColor = isRetro ? '#1a801a' : '#9ca3af'
-    const labelHighlight = isRetro ? '#33ff33' : '#22d3ee'
+    const labelHighlight = isRetro ? '#ffb000' : '#e0a23a'
     ctx.fillStyle = labelColor
     ctx.font = isRetro ? '11px "VCR OSD Mono", "Courier New", monospace' : '11px monospace'
     ctx.textAlign = 'left'
@@ -367,7 +404,7 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
         ctx.fillText('Diverted', labelX, labelY)
       }
     }
-  }, [snapshot, wallJson, limiterPoints, isModern, isRetro])
+  }, [snapshot, wallJson, limiterPoints, isRetro])
 
   // Redraw on data change
   useEffect(() => {
@@ -387,14 +424,92 @@ export default function EquilibriumCanvas({ snapshot, wallJson, limiterPoints }:
     <div ref={containerRef} className="w-full h-full relative">
       <canvas ref={canvasRef} className="absolute inset-0" />
       {/* Title overlay */}
-      <div className="absolute top-2 left-3 text-xs text-gray-500 font-mono flex items-center gap-1.5">
-        <span className="pointer-events-none">Equilibrium</span>
+      <div className="absolute top-2 left-3 panel-title flex items-center gap-1.5">
+        <span className="pointer-events-none"><span className="panel-num">01 · </span>Equilibrium</span>
         <InfoPopup title="Magnetic Equilibrium" position="right">
           {equilibriumInfo}
         </InfoPopup>
       </div>
     </div>
   )
+}
+
+/**
+ * Extend open separatrix divertor legs to the limiter wall.
+ *
+ * The analytic flux legs thin out and the contour terminates short of the
+ * strike points. For each OPEN chain (the closed LCFS is skipped), extend each
+ * free endpoint along its outgoing tangent until it hits the wall (forward
+ * ray-cast, within `maxExtend`). Tangent extension continues the leg's natural
+ * direction, so it doesn't curl back like a nearest-point connector would.
+ */
+function extendLegsToWall(
+  ctx: CanvasRenderingContext2D,
+  points: [number, number][],
+  wall: [number, number][],
+  toX: (r: number) => number,
+  toY: (z: number) => number,
+  jumpThresh: number,
+  maxExtend = 0.5,
+) {
+  if (points.length < 4 || wall.length < 3) return
+
+  // Forward ray (unit dir d from p) vs wall polygon → nearest hit point or null.
+  const rayHit = (px: number, py: number, dx: number, dy: number): [number, number] | null => {
+    let bestT = Infinity
+    let hit: [number, number] | null = null
+    for (let i = 0; i < wall.length; i++) {
+      const a = wall[i]
+      const b = wall[(i + 1) % wall.length]
+      const v1x = px - a[0], v1y = py - a[1]
+      const v2x = b[0] - a[0], v2y = b[1] - a[1]
+      const v3x = -dy, v3y = dx
+      const denom = v2x * v3x + v2y * v3y
+      if (Math.abs(denom) < 1e-9) continue
+      const t = (v2x * v1y - v2y * v1x) / denom // distance along ray (d is unit)
+      const s = (v1x * v3x + v1y * v3y) / denom // position on segment
+      if (t > 1e-4 && t < bestT && s >= 0 && s <= 1) {
+        bestT = t
+        hit = [px + t * dx, py + t * dy]
+      }
+    }
+    return hit && bestT <= maxExtend ? hit : null
+  }
+
+  // Split into chains at jumps.
+  const chains: [number, number][][] = []
+  let cur: [number, number][] = []
+  for (let i = 0; i < points.length; i++) {
+    if (i > 0) {
+      const d = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1])
+      if (d > jumpThresh) { chains.push(cur); cur = [] }
+    }
+    cur.push(points[i])
+  }
+  if (cur.length) chains.push(cur)
+
+  const extend = (end: [number, number], back: [number, number]) => {
+    let dx = end[0] - back[0]
+    let dy = end[1] - back[1]
+    const n = Math.hypot(dx, dy)
+    if (n < 1e-9) return
+    dx /= n; dy /= n
+    const h = rayHit(end[0], end[1], dx, dy)
+    if (!h) return
+    ctx.beginPath()
+    ctx.moveTo(toX(end[0]), toY(end[1]))
+    ctx.lineTo(toX(h[0]), toY(h[1]))
+    ctx.stroke()
+  }
+
+  for (const ch of chains) {
+    if (ch.length < 4) continue
+    const f = ch[0]
+    const l = ch[ch.length - 1]
+    if (Math.hypot(f[0] - l[0], f[1] - l[1]) < jumpThresh) continue // closed loop
+    extend(l, ch[ch.length - 4]) // outgoing tangent at the last point
+    extend(f, ch[3]) // outgoing tangent at the first point
+  }
 }
 
 /**

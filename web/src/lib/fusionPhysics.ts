@@ -228,25 +228,25 @@ export function computeFusion(snapshot: Snapshot, device: Device): FusionState {
   // isn't dominating the denominator) and smoothly ramping Q to zero when
   // Ip is below 50% of nominal (plasma is no longer in a meaningful state).
   // Q = P_fusion / P_external, with protections against rampdown spikes.
-  // During rampdown, heating drops before fusion power decays, causing Q to
-  // diverge. Solution: fade Q aggressively when programmed Ip drops below
-  // 90% of max (rampdown has begun) and cap at 10.
-  // Q = P_fusion / P_external.  To prevent rampdown spikes, cap Q at
-  // whatever value it had when external heating was at full power.
-  // Use a simple approach: Q denominator is always at least 30% of p_input,
-  // and Q fades to zero when Ip drops below 90%.
+  // During rampdown, external heating drops before fusion power decays
+  // (thermal inertia), causing Q = P_fus/P_ext to spike. Solution:
+  // 1. Floor the denominator at the total external heating (not alpha)
+  // 2. Fade Q smoothly as Ip drops below flat-top
+  // 3. Cap at 15 to prevent display artifacts
   const p_alpha = snapshot.p_alpha ?? 0
   const p_external = snapshot.p_input - p_alpha
+  const p_aux = snapshot.p_input - p_alpha - (snapshot.p_ohmic ?? 0)
   const ip_frac = device.ip_max > 0 ? snapshot.ip / device.ip_max : 0
   const prog_ip_frac = device.ip_max > 0 ? (snapshot.prog_ip ?? snapshot.ip) / device.ip_max : 0
-  // Fade starts at 95% Ip (very early rampdown detection), zero at 30%
-  const ip_fade = Math.min(Math.max((prog_ip_frac - 0.30) / 0.65, 0), 1.0)
+  // Fade starts early (98% Ip) and reaches zero at 30%
+  const ip_fade = Math.min(Math.max((prog_ip_frac - 0.30) / 0.68, 0), 1.0)
     * Math.min(Math.max((ip_frac - 0.20) / 0.60, 0), 1.0)
-  // Denominator: never let it drop below the external heating component
-  // at flat-top equivalent. Use max of actual p_external and a floor.
-  const denom = Math.max(p_external, p_alpha > 0.1 ? p_alpha * 0.5 : 0, 1.0)
+  // Denominator: use the larger of actual p_external or the auxiliary
+  // heating power. This prevents the denom from collapsing when heating
+  // is cut before stored energy decays.
+  const denom = Math.max(p_external, p_aux, 1.0)
   const q_plasma = denom > 1.0
-    ? Math.min(p_fus_MW / denom, 30) * ip_fade
+    ? Math.min(p_fus_MW / denom, 15) * ip_fade
     : 0
 
   return {
@@ -280,11 +280,11 @@ export interface DivertorState {
  *
  * where C_th is the thermal capacitance of the armor tile (ρ × c_p × L),
  * q_applied is the incident heat flux, q_cooling is active water cooling
- * (ITER only) or inter-shot water cooling (JET/DIII-D ≈ 0 during pulse),
+ * (ITER only) or inter-pulse water cooling (JET/DIII-D ≈ 0 during pulse),
  * and q_radiation is Stefan-Boltzmann radiative cooling from the surface.
  *
  * This gives realistic thermal evolution: temperature rises through the
- * discharge, spikes during ELMs, and recovers between ELMs.
+ * pulse, spikes during ELMs, and recovers between ELMs.
  */
 export class DivertorThermalModel {
   t_surface: number   // Current surface temperature (°C)
@@ -310,7 +310,7 @@ export class DivertorThermalModel {
       this.rho = 1800        // graphite density (kg/m³)
       this.cp = 1200         // effective average specific heat (J/kg/K)
       this.armor_L = 0.025   // 25 mm effective tile + substrate thickness
-      this.T_coolant = 25    // room temp water (between shots only)
+      this.T_coolant = 25    // room temp water (between pulses only)
       this.h_cool = 0        // no active cooling during pulse
     } else if (deviceId === 'iter') {
       // ITER tungsten monoblocks — actively water-cooled.
@@ -358,7 +358,7 @@ export class DivertorThermalModel {
     }
   }
 
-  /** Reset to ambient when starting a new discharge or switching device */
+  /** Reset to ambient when starting a new pulse or switching device */
   reset(): void {
     this.t_surface = this.ambientTemp(this.deviceId)
   }
